@@ -3,6 +3,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
 
+
+
 class WindowGenerator():
   def __init__(self, input_width, label_width, shift,
                train_df, val_df, test_df,
@@ -54,8 +56,11 @@ def split_window(self, features):
   inputs.set_shape([None, self.input_width, None])
   labels.set_shape([None, self.label_width, None])
 
-  return inputs, labels
+  # Print the shapes of inputs and labels
+  print(f'Inputs shape: {inputs.shape}')
+  print(f'Labels shape: {labels.shape}')
 
+  return inputs, labels
 WindowGenerator.split_window = split_window
 def plot(self,plot_col,  model=None,   max_subplots=3, ):
   inputs, labels = self.example
@@ -112,6 +117,8 @@ def make_dataset(self, data):
   ds = ds.map(self.split_window)
 
   return ds
+
+
 def plot_data(df) :
 
     plot_cols = df.columns[1]
