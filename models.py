@@ -47,6 +47,6 @@ def create_Conv1D(input_shape, label_width):
         tf.keras.layers.Dense(64, activation='relu'),
         tf.keras.layers.Dense(label_width)
     ] , name='Conv1D')
+    return Conv1D  
 
-    return Conv1D
 
