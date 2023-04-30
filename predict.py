@@ -2,23 +2,22 @@
 import pandas as pd
 import pandas as pd
 import datetime
-from  window_generator  import WindowGenerator
 import pandas as pd
 import tensorflow as tf
 from binance_data import get_binance_data
-from data_processing import train_test   , compile_and_fit , normalize , data_parser  , data_for_prediction_parser
+from data_processing import      normalize , data_parser  , data_for_prediction_parser
 import pandas as pd
-import models
-import pickle
 from datetime import timedelta as td
 import glob
 import tensorflow as tf
 import config.config as config
-
+import logger
 import pandas as pd
-import matplotlib.pyplot as plt
 
-def predict():
+# Configure the logger
+logging = logger.configure_logging(config.LOG_DIR, config.LOG_FILE_NAME)
+
+def predict(coin:str):
     # Get the data from Binance and Parse for preditions
 
     end_time = datetime.datetime.now()
@@ -35,43 +34,52 @@ def predict():
     data_for_prediction = data_for_prediction_parser(prediction_data , input_shape=config.input_shape)
 
     #loads the models
-
     model_files = glob.glob("models/*.h5")
     loaded_models={}
-    for model_file in model_files:
+    logging.info("loading local model for " + coin + "...")
+    try:
+        matching_models = [
+        model for model in model_files
+        if coin in model.split("/")[-1].split(".")[0].split("_")[1]
+            ]
+        if len(matching_models) == 0:
+            raise Exception("No matching models found")
+        elif len(matching_models) > 1:
+            raise Exception("More than one matching model found")
+    except Exception as e:
+    # logging.info(matching_models)
+        logging.error(e)
+
+    for model_file in matching_models:
+        logging.info("loading model: " + model_file)
         loaded_models[model_file.split(".h5")[0]] = tf.keras.models.load_model(model_file) 
+        #predicts 
+        first_key = next(iter(loaded_models))
+        model = loaded_models[first_key]
+        logging.info("predicting..." + coin)
+        prediction = model.predict(data_for_prediction)[0]
+        # create a new DatetimeIndex for the next 24 hours
+        #TODO: change this to config.variables_used ustead of close
+        logging.info("creating new DatetimeIndex for the next 24 hours")
+        td = pd.Timedelta(hours=config.label_width)
+        dti_new = df_pred["close"].tail(config.label_width).index + td
+        normalized_prediction = pd.DataFrame(prediction, columns=["close"] , index=dti_new ) 
+        #fits total data
+        combined_df = pd.concat([df_pred_norm[config.variables_used].tail(48), normalized_prediction])
+        logging.info("denormalizing the prediction")
+        # Denormalize the prediction
 
-    #predicts 
-
-    first_key = next(iter(loaded_models))
-    model = loaded_models[first_key]
-    prediction = model.predict(data_for_prediction)[0]
-
-
-    # create a new DatetimeIndex for the next 24 hours
-
-    td = pd.Timedelta(hours=config.label_width)
-    dti_new = df_pred["close"].tail(config.label_width).index + td
-    normalized_prediction = pd.DataFrame(prediction, columns=["close"] , index=dti_new ) 
-    #fits total data
-    combined_df = pd.concat([df_pred_norm[config.variables_used].tail(48), normalized_prediction])
-
-    # Denormalize the prediction
-
-    mean = df_pred["close"].shift( config.label_width).rolling(30).mean().tail(config.label_width )
-    mean.index = dti_new
-    std = df_pred["close"].shift(config.label_width).rolling(30).std().tail(config.label_width )
-    std.index =dti_new
-    predictions_no_ma  = normalized_prediction["close"]  *std + mean
-    
-    # Concatenate the two DataFrames
-    df1 = df_pred["close"].tail(config.input_width)
-    df2 = predictions_no_ma .squeeze()  # Convert the DataFrame into a pandas Series
-    combined_df_ = pd.concat([df1, df2])
-    combined_df_.columns = ["close"]
-    #print(combined_df_.index )
-    #print(combined_df_.values) 
-
-
-
-    return combined_df_
+        mean = df_pred["close"].shift( config.label_width).rolling(30).mean().tail(config.label_width )
+        mean.index = dti_new
+        std = df_pred["close"].shift(config.label_width).rolling(30).std().tail(config.label_width )
+        std.index =dti_new
+        predictions_no_ma  = normalized_prediction["close"]  *std + mean
+        
+        # Concatenate the two DataFrames
+        logging.info("concatenating the two DataFrames past and future")
+        df1 = df_pred["close"].tail(config.input_width)
+        df2 = predictions_no_ma .squeeze()  # Convert the DataFrame into a pandas Series
+        combined_df_ = pd.concat([df1, df2])
+        combined_df_.columns = ["close"]
+   
+        return combined_df_

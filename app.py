@@ -1,41 +1,42 @@
 from flask import Flask, request, jsonify
-import glob
-import tensorflow as tf
-import pandas as pd
+from pymongo import MongoClient
+from typing import List, Dict
 import datetime
 import random
-from typing import List, Dict
-import predict
+from dotenv import load_dotenv
+import os 
 
 from flask_cors import CORS
 
 app = Flask(__name__)
-CORS(app)
+cors = CORS(app , origins=["*"])
+DB_KEY =  os.getenv("DB_KEY") 
 
-from typing import List, Dict
+
+def fetch_predictions_from_db() -> List[Dict[str, str]]:
+    # Configure your MongoDB connection
+    client = MongoClient(DB_KEY)
+
+    # Select the database and collection
+    db = client['forecast_crypto_currency']
+    general_collection = db['btc']
+
+    # Fetch the data from the collection, sorting by the 'timestamp' field in descending order
+    prediction_data = general_collection.find().sort('timestamp', -1).limit(1)
+
+    if prediction_data:
+        print(prediction_data)
+        return list(prediction_data)[0]["data"]
+        #return prediction_data['predictions']
+    else:
+        return []
+
 
 @app.route('/predict', methods=['GET'])
+
 def generate_prediction() -> List[Dict[str, str]]:
-    data=[]
-    prediction = predict.predict()
-    for i in range(0, len(prediction)):
-        data.append({'date': prediction.index[i], 'price': prediction.values[i]})
-    return (data)
-    
-def generate_dummy_data() -> List[Dict[str, str]]:
-    data = []
-    start_date = datetime.date(2022, 1, 1)
-    end_date = datetime.date(2022, 3, 1)
-    time_diff = abs((end_date - start_date).days)
-
-    for i in range(time_diff):
-        current_date = start_date + datetime.timedelta(days=i)
-        date_string = current_date.isoformat()
-        price = random.randint(1, 1000)
-        data.append({'date': date_string, 'price': price})
-
-    return data
-
+    predictions = fetch_predictions_from_db()
+    return jsonify(predictions)
 
 
 if __name__ == '__main__':
