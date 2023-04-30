@@ -27,7 +27,7 @@ def predict(coin:str):
 
     start_timestamp = int(start_time.timestamp() * 1000)
     end_timestamp = int(end_time.timestamp() * 1000)
-    data_pred = get_binance_data('BTCUSDT',start_timestamp, end_timestamp)
+    data_pred = get_binance_data(coin,start_timestamp, end_timestamp)
     df_pred = data_parser(data_pred)
     df_pred_norm = normalize(df_pred,label_width=config.label_width,window=30)
     prediction_data = df_pred_norm.tail(config.input_width)

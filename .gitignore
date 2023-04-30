@@ -1,2 +1,22 @@
+*__pycache__*
+#evniroment
 *.env
 .venv
+__pycache__
+#Used for making AWS Lambda functions
+python
+*.zip
+#models
+.h5
+#dummy notebooj
+laboratory
+#models
+models/*
+#logs
+*.log
+#used for tracking the progress of the model
+checkpoint*
+trial*
+tuner*
+
+
