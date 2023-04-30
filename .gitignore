@@ -1,4 +1,5 @@
 *__pycache__*
+*cpython*
 #evniroment
 *.env
 .venv
@@ -8,7 +9,7 @@ python
 *.zip
 #models
 .h5
-#dummy notebooj
+#dummy notebook
 laboratory
 #models
 models/*
