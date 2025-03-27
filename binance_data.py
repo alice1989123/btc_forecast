@@ -32,3 +32,8 @@ def get_binance_data ( coin, start , end , interval=Client.KLINE_INTERVAL_1HOUR)
     
         return data
 
+def get_tickers():
+        client = Client(API_KEY, API_SECRET)
+
+            
+        return  client.get_all_tickers()

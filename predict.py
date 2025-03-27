@@ -1,6 +1,4 @@
 
-import pandas as pd
-import pandas as pd
 import datetime
 import pandas as pd
 import tensorflow as tf
@@ -31,6 +29,8 @@ def predict(coin:str):
     df_pred = data_parser(data_pred)
     df_pred_norm = normalize(df_pred,label_width=config.label_width,window=30)
     prediction_data = df_pred_norm.tail(config.input_width)
+    logging.info("data parsed for prediction" , prediction_data)
+
     data_for_prediction = data_for_prediction_parser(prediction_data , input_shape=config.input_shape)
 
     #loads the models
@@ -65,7 +65,7 @@ def predict(coin:str):
         dti_new = df_pred["close"].tail(config.label_width).index + td
         normalized_prediction = pd.DataFrame(prediction, columns=["close"] , index=dti_new ) 
         #fits total data
-        combined_df = pd.concat([df_pred_norm[config.variables_used].tail(48), normalized_prediction])
+        #combined_df = pd.concat([df_pred_norm[config.variables_used].tail(48), normalized_prediction])
         logging.info("denormalizing the prediction")
         # Denormalize the prediction
 
@@ -81,5 +81,5 @@ def predict(coin:str):
         df2 = predictions_no_ma .squeeze()  # Convert the DataFrame into a pandas Series
         combined_df_ = pd.concat([df1, df2])
         combined_df_.columns = ["close"]
-   
+        combined_df_.to_csv("predictions/" + coin + ".csv") 
         return combined_df_

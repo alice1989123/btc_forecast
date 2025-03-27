@@ -12,6 +12,7 @@ def read_metadata(coin:str):
     for file_path in glob.glob(path):
         with open(file_path, 'r') as file:
             data = json.load(file)
+        return data
     # Now you can access the data as a Python dictionary
         #print(data)
 #read_meatadata("BTCUSDT")

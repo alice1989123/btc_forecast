@@ -53,16 +53,13 @@ def train_model (coin:str):
         wide_window = WindowGenerator(
         input_width=config.input_width, label_width=config.label_width, shift=0,
         label_columns=config.variables_used, train_df=train_df, val_df=val_df, test_df=test_df)
-
-        
         model= ConvDense(input_shape=config.input_shape, label_width=config.label_width)
         history = model.fit(wide_window.train, epochs=MAX_EPOCHS,
                       validation_data=wide_window.val,
                       callbacks=[early_stopping])
         metadata = { "symbol":coin, "model_name" : model.name , "history": json.dumps(history.history) , "config_label_width" : config.label_width , "config_input_width" : config.input_width , "config_input_shape" : config.input_shape , "config_variables_used" : config.variables_used }
-        
-        json_data = json.dumps(metadata)
 
+        json_data = json.dumps(metadata)
         with open(f"models/{model.name}_{coin}.txt", 'wb') as f:
                 f.write(json_data.encode('utf-8'))
         #save models

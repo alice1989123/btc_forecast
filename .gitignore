@@ -3,6 +3,7 @@
 #evniroment
 *.env
 .venv
+env
 __pycache__
 #Used for making AWS Lambda functions
 python
