@@ -32,7 +32,7 @@ def predict(coin:str):
     logging.info("data parsed for prediction" , prediction_data)
 
     data_for_prediction = data_for_prediction_parser(prediction_data , input_shape=config.input_shape)
-
+    print("data_for_prediction" , data_for_prediction)
     #loads the models
     model_files = glob.glob("models/*.h5")
     loaded_models={}

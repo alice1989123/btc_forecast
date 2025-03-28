@@ -70,7 +70,7 @@ def save_prediction_to_dynamodb(predictions: List[Dict[str, str]], metadata, coi
     cleaned_predictions = convert_types(predictions)
     cleaned_metadata = convert_types(metadata)
     dynamodb = boto3.resource('dynamodb', region_name='eu-central-1')  # choose your region
-    table = dynamodb.Table('crypto_predictions')  # Create this table first (via AWS console or code)
+    table = dynamodb.Table('crypto_predictions_')  # Create this table first (via AWS console or code)
 
     formatted_predictions = [
         {'date': prediction['date'], 'price': prediction['price']}
