@@ -1,4 +1,4 @@
-import predict
+from btc_forecast import predict
 import datetime
 from typing import List, Dict
 import os 

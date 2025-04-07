@@ -1,8 +1,6 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
-import seaborn as sns
-import tensorflow as tf
 import pandas as pd
 
 def train_test(df):
@@ -41,8 +39,20 @@ def  data_parser(data):
     df_pred = df_pred.astype(float)
     return df_pred
     # Print the first few rows of the dataframe
-def data_for_prediction_parser(df ,input_shape ):
-    prediction_data =  df
+def data_for_prediction_parser(df, input_shape):
+    # Ensure it's a 2D array first
+    prediction_data = df.values.astype(np.float32)
+
+    if prediction_data.ndim == 1:
+        # If shape is (2000,), make it (2000, 1)
+        prediction_data = prediction_data.reshape(-1, 1)
+
+    if prediction_data.shape != input_shape:
+        raise ValueError(f"❌ Input shape mismatch: got {prediction_data.shape}, expected {input_shape}")
+
+    # Add batch dimension: (1, input_width, num_features)
+    return prediction_data.reshape(1, *input_shape)
+
 
 
 # reshape the 'new_data' to match the shape of the training data

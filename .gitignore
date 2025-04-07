@@ -1,9 +1,10 @@
 *__pycache__*
+__pycache__/
 *cpython*
 #evniroment
 *.env
 .venv
-env
+envs
 __pycache__
 #Used for making AWS Lambda functions
 python
@@ -20,5 +21,8 @@ models/*
 checkpoint*
 trial*
 tuner*
-
-
+Data
+btc_forecast/predictions
+predictions/
+__pycache__/
+*.py[cod]
