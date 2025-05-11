@@ -1,0 +1,2 @@
+MAE,RMSE,Model,Coin,Input Width,Label Width,Batch Size,Learning Rate,Num Epochs,Windows Normalization Length,Train Loss,Validation Loss
+1113.685511612685,2221.0900517637706,SimpleFC,BTCUSDT,200,12,64,0.001,50,30,0.0019434214478713798,0.0022967788369217526

@@ -7,16 +7,18 @@ from datetime import timedelta as td
 
 from btc_forecast.binance_data import get_binance_data
 from btc_forecast.data_processing import normalize, data_parser, data_for_prediction_parser
-from btc_forecast.models_torch.conv_dense import ConvDenseTorch
-from config import config
+from config import config , models_config
 import logger
+from btc_forecast.models_torch.registry import get_model
+from config.models_config import get_model_config
+
 
 # Setup logging
 logging = logger.configure_logging(config.LOG_DIR, config.LOG_FILE_NAME)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-def predict(coin: str):
+def predict(coin: str , model_name="ConvDenseTorch"):
     logging.info(f"📊 Predicting {coin}...")
 
     # ──⏳ Time window
@@ -33,23 +35,20 @@ def predict(coin: str):
     df_norm = normalize(df, label_width=config.label_width, window=30)
 
     # Use the last input_width rows as model input
-    recent_data = df_norm.tail(config.input_width)[config.variables_used]
-    input_tensor = data_for_prediction_parser(recent_data, input_shape=config.input_shape)
+    recent_data = df_norm.tail(models_config.input_width)[models_config.variables_used]
+    input_tensor = data_for_prediction_parser(recent_data, input_shape=models_config.input_shape)
     input_tensor = torch.tensor(input_tensor, dtype=torch.float32).to(device)
-
+    #print("Input tensor shape:", input_tensor.shape)
     # ──🔍 Find model
-    model_path = f"models/ConvDenseTorch_{coin}_best.pt"
+    model_path = f"models/{model_name}_{coin}_best.pt"
     if not os.path.exists(model_path):
         logging.error(f"❌ Model not found for {coin}")
         return None
 
-    # ──📦 Load model
-    model = ConvDenseTorch(
-        input_width=config.input_width,
-        label_width=config.label_width,
-        num_inputs=len(config.variables_used),
-        num_outputs=len(config.variables_used)
-    ).to(device)
+    model_config_ = get_model_config(model_name)
+    # Update config values like label_width if needed
+
+    model = get_model(model_name , **model_config_).to(device)
 
     model.load_state_dict(torch.load(model_path, map_location=device))
     model.eval()
@@ -58,6 +57,8 @@ def predict(coin: str):
 
     # ──📅 Create timestamps for predicted steps
     with torch.no_grad():
+        #print(model)
+        #raise Exception("Model not loaded correctly")
         preds = model(input_tensor).cpu().numpy()
         print("Preds shape BEFORE fix:", preds.shape)
 
@@ -69,23 +70,29 @@ def predict(coin: str):
         preds = preds.reshape(-1, 1)
 
     # Transpose if necessary
-    expected_shape = (config.label_width, len(config.variables_used))
+    expected_shape = (models_config.label_width, len(models_config.variables_used))
 
     if preds.shape != expected_shape:
         
         raise ValueError(f"❌ Final shape mismatch: got {preds.shape}, expected {expected_shape}")
-    dti_new = pd.date_range(end=df.index[-1], periods=config.label_width + 1, freq="h")[1:]
+    dti_new = pd.date_range(
+    start=df.index[-1] + pd.Timedelta(hours=1),
+    periods=models_config.label_width,
+    freq="h"
+    )
+    pred_df = pd.DataFrame(preds, columns=models_config.variables_used, index=dti_new)
+    #raise Exception("Preds and dti_new shapes do not match")
     
-    pred_df = pd.DataFrame(preds, columns=["close"], index=dti_new)
+    #pred_df = pd.DataFrame(preds, models_config.variables_used, index=dti_new)
 
    
 
 
     # ──📈 Denormalize "close" (example for 1 variable; adapt if more)
     denorm_df = pred_df.copy()
-    for var in config.variables_used:
-        mean = df[var].shift(config.label_width).rolling(window=30).mean().tail(config.label_width)
-        std = df[var].shift(config.label_width).rolling(window=30).std().tail(config.label_width)
+    for var in models_config.variables_used:
+        mean = df[var].shift(models_config.label_width).rolling(window=30).mean().tail(models_config.label_width)
+        std = df[var].shift(models_config.label_width).rolling(window=30).std().tail(models_config.label_width)
 
         mean.index = dti_new
         std.index = dti_new
@@ -97,12 +104,12 @@ def predict(coin: str):
     os.makedirs("predictions", exist_ok=True)
 
     # Combine with previous close for plotting
-    combined = pd.concat([df["close"].tail(config.input_width), denorm_df["close"]])
+    
+    combined = pd.concat([df["close"].tail(models_config.input_width), denorm_df["close"]])
     combined.to_csv(out_path)
 
     logging.info(f"✅ Saved prediction for {coin} to {out_path}")
     return combined
 
-coins = config.coins
         
       
