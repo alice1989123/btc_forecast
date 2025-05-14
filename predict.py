@@ -2,8 +2,8 @@
 import datetime
 import pandas as pd
 import tensorflow as tf
-from binance_data import get_binance_data
-from data_processing import      normalize , data_parser  , data_for_prediction_parser
+from btc_forecast.binance_data import get_binance_data , get_stored_klines
+from btc_forecast.data_processing import      normalize , data_parser  , data_for_prediction_parser
 import pandas as pd
 from datetime import timedelta as td
 import glob
@@ -25,6 +25,7 @@ def predict(coin:str):
 
     start_timestamp = int(start_time.timestamp() * 1000)
     end_timestamp = int(end_time.timestamp() * 1000)
+    #TODO: Use hitorical get_stored_klines(coin, start_time, end_time)
     data_pred = get_binance_data(coin,start_timestamp, end_timestamp)
     df_pred = data_parser(data_pred)
     df_pred_norm = normalize(df_pred,label_width=config.label_width,window=30)

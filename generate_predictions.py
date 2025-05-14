@@ -1,7 +1,6 @@
 from btc_forecast import predict
 import datetime
 from typing import List, Dict
-import os 
 import config.config as config
 import metadata
 import boto3
@@ -10,11 +9,18 @@ from typing import List, Dict
 import pandas as pd
 from decimal import Decimal
 import argparse
-import sys
+import time
+import psycopg2
+import uuid
+import json
 
+import os
+import dotenv
+dotenv.load_dotenv(".keys.env")
 
-
-
+DB_HOST = os.getenv("DB_HOST")
+DB_USER = os.getenv("DB_USER")
+DB_PASSWORD = os.getenv("DB_PASSWORD")
 
 
 
@@ -44,28 +50,57 @@ def convert_types(obj):
 
 
 def save_prediction_to_dynamodb(predictions: List[Dict[str, str]], metadata, coin: str):
-    
     cleaned_predictions = convert_types(predictions)
     cleaned_metadata = convert_types(metadata)
-    dynamodb = boto3.resource('dynamodb', region_name='eu-central-1')  # choose your region
-    table = dynamodb.Table('crypto_predictions_')  # Create this table first (via AWS console or code)
-
-    formatted_predictions = [
-        {'date': prediction['date'], 'price': prediction['price']}
-        for prediction in predictions
-    ]
-
-    #print( "Formatted predictions:", formatted_predictions)
-    #print("Formatted metadata:", cleaned_metadata)
     
+    # TTL: auto-expire in 12 hours (43200 seconds)
+    ttl = int(time.time()) + 12 * 3600  # current epoch time + 12 hours
 
-    # Save or update item
+    dynamodb = boto3.resource('dynamodb', region_name='eu-central-1')
+    table = dynamodb.Table('crypto_predictions_')
+
     table.put_item(Item={
-    'coin': coin,
-    'timestamp': datetime.utcnow().isoformat(),
-    'predictions': cleaned_predictions,
-    'metadata': cleaned_metadata
+        'coin': coin,
+        'timestamp': datetime.utcnow().isoformat(),
+        'predictions': cleaned_predictions,
+        'metadata': cleaned_metadata,
+        'ttl': ttl  
     })
+def save_prediction_to_postgres(predictions, metadata, coin):
+    conn = psycopg2.connect(
+        database='crypto_predictions',
+        user='alice',
+        password='pollo3.1416bill',
+        host=DB_HOST
+    )
+    cursor = conn.cursor()
+
+    pred_id = str(uuid.uuid4())
+    now = datetime.utcnow()
+
+    model_name = metadata.get('model_name')
+    input_width = int(metadata.get('config_input_width', 0))
+    label_width = int(metadata.get('config_label_width', 12))
+
+    cursor.execute("""
+        INSERT INTO prediction_metadata (id, coin, model_name, input_width, created_at, metadata_json)
+        VALUES (%s, %s, %s, %s, %s, %s)
+    """, (pred_id, coin, model_name, input_width, now, json.dumps(metadata)))
+
+    # Save each prediction with is_predicted flag
+    for i, p in enumerate(predictions):
+        date_str = p['date']
+        price_val = float(p['price'])
+        is_predicted = (i >= len(predictions) - label_width)
+        cursor.execute("""
+            INSERT INTO predicted_prices (id, prediction_time, price, is_historical)
+            VALUES (%s, %s, %s, %s)
+        """, (pred_id, date_str, price_val, not is_predicted))  # `is_historical = not is_predicted`
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
 
 def get_new_predictions(model_name: str = "ConvDenseTorch"):
     # List of coins from config
@@ -77,10 +112,12 @@ def get_new_predictions(model_name: str = "ConvDenseTorch"):
         predictions = generate_prediction(coin , model_name=model_name)
         
         # Read metadata for the coin
-        metadata_ = metadata.read_metadata(coin)
+        metadata_ = metadata.read_metadata(coin , model_name=model_name)
+        metadata_["model_name"] = model_name
         
         # Save the predictions to the database
         #save_prediction_to_db(predictions, metadata_, coin)
+        save_prediction_to_postgres(predictions , metadata_ , coin)
         save_prediction_to_dynamodb(predictions , metadata_ , coin)
 
 if __name__ == "__main__":
