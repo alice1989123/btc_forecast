@@ -4,7 +4,8 @@ from typing import List, Dict
 import config.config as config
 import metadata
 import boto3
-from datetime import datetime
+from datetime import datetime, UTC
+
 from typing import List, Dict
 import pandas as pd
 from decimal import Decimal
@@ -13,7 +14,7 @@ import time
 import psycopg2
 import uuid
 import json
-
+import logging
 import os
 import dotenv
 dotenv.load_dotenv(".keys.env")
@@ -22,7 +23,8 @@ DB_HOST = os.getenv("DB_HOST")
 DB_USER = os.getenv("DB_USER")
 DB_PASSWORD = os.getenv("DB_PASSWORD")
 
-
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 def generate_prediction(coin : str , model_name :str) -> List[Dict[str, str]]:
     data = []
@@ -61,7 +63,7 @@ def save_prediction_to_dynamodb(predictions: List[Dict[str, str]], metadata, coi
 
     table.put_item(Item={
         'coin': coin,
-        'timestamp': datetime.utcnow().isoformat(),
+        'timestamp': datetime.now(UTC).isoformat(),
         'predictions': cleaned_predictions,
         'metadata': cleaned_metadata,
         'ttl': ttl  
@@ -76,7 +78,7 @@ def save_prediction_to_postgres(predictions, metadata, coin):
     cursor = conn.cursor()
 
     pred_id = str(uuid.uuid4())
-    now = datetime.utcnow()
+    now = datetime.now(UTC).isoformat()
 
     model_name = metadata.get('model_name')
     input_width = int(metadata.get('config_input_width', 0))
@@ -109,16 +111,22 @@ def get_new_predictions(model_name: str = "ConvDenseTorch"):
     # Iterate through each coin
     for coin in coins:
         # Generate predictions for the coin
-        predictions = generate_prediction(coin , model_name=model_name)
-        
-        # Read metadata for the coin
-        metadata_ = metadata.read_metadata(coin , model_name=model_name)
-        metadata_["model_name"] = model_name
-        
-        # Save the predictions to the database
-        #save_prediction_to_db(predictions, metadata_, coin)
-        save_prediction_to_postgres(predictions , metadata_ , coin)
-        save_prediction_to_dynamodb(predictions , metadata_ , coin)
+        try:
+            logger.info(f"Generating predictions for {coin} using model {model_name}...")        
+            predictions = generate_prediction(coin , model_name=model_name)
+            
+            # Read metadata for the coin
+            metadata_ = metadata.read_metadata(coin , model_name=model_name)
+            metadata_["model_name"] = model_name
+            
+            # Save the predictions to the database
+            #save_prediction_to_db(predictions, metadata_, coin)
+            save_prediction_to_postgres(predictions , metadata_ , coin)
+            save_prediction_to_dynamodb(predictions , metadata_ , coin)
+
+        except Exception as e:
+            logger.error(f"Error generating predictions for {coin}: {e}")
+            continue
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run predictions and upload to DynamoDB.")

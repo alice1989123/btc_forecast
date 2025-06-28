@@ -11,7 +11,8 @@ from config import config , models_config
 import logger
 from btc_forecast.models_torch.registry import get_model
 from config.models_config import get_model_config
-
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
 
 # Setup logging
 logging = logger.configure_logging(config.LOG_DIR, config.LOG_FILE_NAME)
@@ -60,7 +61,6 @@ def predict(coin: str , model_name="ConvDenseTorch"):
         #print(model)
         #raise Exception("Model not loaded correctly")
         preds = model(input_tensor).cpu().numpy()
-        print("Preds shape BEFORE fix:", preds.shape)
 
     if preds.ndim == 3 and preds.shape[0] == 1:
         preds = preds[0]  # squeeze batch
