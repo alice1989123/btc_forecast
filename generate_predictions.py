@@ -19,9 +19,11 @@ import os
 import dotenv
 dotenv.load_dotenv(".keys.env")
 
-DB_HOST = os.getenv("DB_HOST")
-DB_USER = os.getenv("DB_USER")
-DB_PASSWORD = os.getenv("DB_PASSWORD")
+DB_HOST = os.getenv("DBHOST")
+DB_USER = os.getenv("DBUSER")
+DB_PASSWORD = os.getenv("DBPASSWORD")
+DB_NAME = os.getenv("DBNAME")
+
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -69,10 +71,10 @@ def save_prediction_to_dynamodb(predictions: List[Dict[str, str]], metadata, coi
         'ttl': ttl  
     })
 def save_prediction_to_postgres(predictions, metadata, coin):
-    conn = psycopg2.connect(
-        database='crypto_predictions',
-        user='alice',
-        password='pollo3.1416bill',
+    conn = psycopg2.connect( #TODO: use environment variables for connection details
+        database=DB_NAME,
+        user=DB_USER,
+        password=DB_PASSWORD,
         host=DB_HOST
     )
     cursor = conn.cursor()
@@ -112,7 +114,9 @@ def get_new_predictions(model_name: str = "ConvDenseTorch"):
     for coin in coins:
         # Generate predictions for the coin
         try:
-            logger.info(f"Generating predictions for {coin} using model {model_name}...")        
+            logger.info(f"Generating predictions for {coin} using model {model_name}...")
+            logger.info(f"Hello!!!...")        
+        
             predictions = generate_prediction(coin , model_name=model_name)
             
             # Read metadata for the coin

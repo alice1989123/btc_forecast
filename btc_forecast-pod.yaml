@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: btc-forecast-debug
+  namespace: production
+  labels:
+    app: btc-forecast
+spec:
+  restartPolicy: Never
+  containers:
+    - name: btc-forecast
+      image: registry-docker-registry.registry.svc.cluster.local:5000/btc_forecast:latest
+      command: ["/bin/bash", "-c"]
+      args:
+        - |
+          echo "Entering debug mode..." && sleep 3600
+      envFrom:
+        - secretRef:
+            name: db-creds
+        - secretRef:
+            name: aws-credentials-dynamo
+      resources:
+        requests:
+          memory: "512Mi"
+          cpu: "250m"
+        limits:
+          memory: "2Gi"
+          cpu: "1000m"
+  terminationGracePeriodSeconds: 30
