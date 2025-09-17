@@ -1,0 +1,8 @@
+{
+  "model_class": "ConvFC",
+  "input_width": 100,
+  "label_width": 6,
+  "num_features": 1,
+  "conv_channels": 16,
+  "kernel_size": 3
+}

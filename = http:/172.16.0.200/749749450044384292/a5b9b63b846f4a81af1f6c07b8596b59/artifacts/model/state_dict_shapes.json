@@ -1,0 +1,37 @@
+{
+  "gru.weight_ih_l0": [
+    192,
+    1
+  ],
+  "gru.weight_hh_l0": [
+    192,
+    64
+  ],
+  "gru.bias_ih_l0": [
+    192
+  ],
+  "gru.bias_hh_l0": [
+    192
+  ],
+  "gru.weight_ih_l1": [
+    192,
+    64
+  ],
+  "gru.weight_hh_l1": [
+    192,
+    64
+  ],
+  "gru.bias_ih_l1": [
+    192
+  ],
+  "gru.bias_hh_l1": [
+    192
+  ],
+  "fc.weight": [
+    6,
+    64
+  ],
+  "fc.bias": [
+    6
+  ]
+}

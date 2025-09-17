@@ -1,0 +1,5 @@
+mlflow
+torch==2.5.1
+numpy<3,>=1.24
+pandas<3,>=2.0
+scikit-learn<2,>=1.3

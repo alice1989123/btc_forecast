@@ -1,0 +1,15 @@
+{
+  "MAE/step": 101.29700290101634,
+  "RMSE/step": 208.4422045200864,
+  "Model": "SimpleFC",
+  "Coin": "BTCUSDT",
+  "Input Width": 100,
+  "Label Width": 6,
+  "Batch Size": 32,
+  "Learning Rate": 0.001,
+  "Num Epochs": 50,
+  "Windows Normalization Length": 30,
+  "Train Loss Last": 0.0018485375420610065,
+  "Val Loss Last": 0.0020364369569075796,
+  "Features": "close"
+}

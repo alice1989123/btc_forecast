@@ -1,0 +1,8 @@
+{
+  "model_class": "GRUStacked",
+  "input_width": 100,
+  "label_width": 6,
+  "num_features": 1,
+  "hidden_size": 64,
+  "num_layers": 2
+}

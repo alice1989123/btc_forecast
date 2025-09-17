@@ -1,0 +1,10 @@
+artifact_location: /media/alice/SeagateLinux/alice_backup/btc_forecast/= http:/172.16.0.200/749749450044384292/models/m-269e97e16c7b40428bdb87dead978bfa/artifacts
+creation_timestamp: 1758084458375
+experiment_id: '749749450044384292'
+last_updated_timestamp: 1758084458795
+model_id: m-269e97e16c7b40428bdb87dead978bfa
+model_type: null
+name: model
+source_run_id: bbfb536985bf49ceb3d802475a50ac19
+status: 2
+status_message: null
