@@ -1,6 +1,0 @@
-{
-  "model_class": "SimpleFC",
-  "input_width": 100,
-  "label_width": 6,
-  "num_features": 1
-}

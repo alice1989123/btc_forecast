@@ -1,0 +1,18 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+      {
+        "name": "Run generate_predictions.py",
+        "type": "python",
+        "request": "launch",
+        "program": "${workspaceFolder}/generate_predictions.py",
+        "cwd": "${workspaceFolder}",
+        "console": "integratedTerminal",
+        "justMyCode": true,
+        "args": ["--model_name", "gru", "--version", "2"],
+        
+        
+      }
+    ]
+  }
+  

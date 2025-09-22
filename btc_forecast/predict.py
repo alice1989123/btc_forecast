@@ -1,67 +1,112 @@
 import torch
 import pandas as pd
 import datetime
-import glob
 import os
+import mlflow.pytorch
 from datetime import timedelta as td
-
+from utils.rolling import resolve_rolling_window
 from btc_forecast.binance_data import get_binance_data
 from btc_forecast.data_processing import normalize, data_parser, data_for_prediction_parser
-from config import config , models_config
+from config import config
 import logger
-from btc_forecast.models_torch.registry import get_model
-from config.models_config import get_model_config
 import warnings
+import dotenv
+from mlflow import MlflowClient
+import os, mlflow
+import logging
+
+dotenv.load_dotenv()  # take environment variables from .env.
+
+TRACKING_URI = os.getenv("TRACKING_URI")
+if TRACKING_URI:
+    mlflow.set_tracking_uri(TRACKING_URI)
+else:
+    raise ValueError("TRACKING_URI environment variable not set.")
+
+
+
+client = MlflowClient()
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
 # Setup logging
-logging = logger.configure_logging(config.LOG_DIR, config.LOG_FILE_NAME)
+log = logging.getLogger(__name__)
+
+def _apply_s3_params(
+    endpoint: str | None = None,
+    access_key: str | None = None,
+    secret_key: str | None = None,
+    region: str | None = "us-east-1",
+    verify: bool = True,          # set False for self-signed MinIO
+):
+    """Set just enough env vars for MLflow/boto3 to use S3-compatible storage."""
+    if endpoint:
+        if not endpoint.startswith("http"):
+            endpoint = "https://" + endpoint if verify else "http://" + endpoint
+        os.environ["MLFLOW_S3_ENDPOINT_URL"] = endpoint
+    if access_key:
+        os.environ["AWS_ACCESS_KEY_ID"] = access_key
+    if secret_key:
+        os.environ["AWS_SECRET_ACCESS_KEY"] = secret_key
+    if region and not (os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION")):
+        os.environ["AWS_REGION"] = region
+    # path-style works best with MinIO
+    os.environ.setdefault("AWS_S3_ADDRESSING_STYLE", "path")
+    if not verify:
+        # lets MLflow/boto3 skip TLS verification for the S3 endpoint
+        os.environ["MLFLOW_S3_IGNORE_TLS"] = "true"
+    # optional: masked debug
+    if log.isEnabledFor(logging.DEBUG):
+        mask = lambda s: s[:3] + "..." + s[-4:] if s else None
+        log.debug(
+            "S3 params applied endpoint=%s access=%s region=%s verify=%s",
+            os.getenv("MLFLOW_S3_ENDPOINT_URL"), mask(os.getenv("AWS_ACCESS_KEY_ID")),
+            os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION"), verify
+        )
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-def predict(coin: str , model_name="ConvDenseTorch"):
-    logging.info(f"📊 Predicting {coin}...")
+def predict(config :dict , coin: str, model_name: str, version: int = 1, *,
+    tracking_uri: str | None = None,
+    s3_endpoint: str | None = None,
+    s3_access_key: str | None = None,
+    s3_secret_key: str | None = None,
+    s3_region: str | None = "us-east-1",
+    s3_verify: bool = True,):
 
+    # 1) Wire S3 creds for MLflow artifacts (MinIO or AWS S3)
+    logging.info(f"📊 Predicting {coin} with {model_name} (v{version})...")
+    _apply_s3_params(s3_endpoint, s3_access_key, s3_secret_key, s3_region, s3_verify)
+    # 2) Tracking server (HTTP URL of MLflow)
+    if tracking_uri:
+        mlflow.set_tracking_uri(tracking_uri)
     # ──⏳ Time window
     end_time = datetime.datetime.now()
     start_time = end_time - datetime.timedelta(hours=1000)
-
-    # Convert to timestamp
     start_ts = int(start_time.timestamp() * 1000)
     end_ts = int(end_time.timestamp() * 1000)
 
     # ──📥 Get & normalize data
     raw_data = get_binance_data(coin, start_ts, end_ts)
     df = data_parser(raw_data)
-    df_norm = normalize(df, label_width=config.label_width, window=30)
+    df_norm = normalize(df, label_width=config.get("label_width"), window=config.get("windows_normalization_length"))
 
-    # Use the last input_width rows as model input
-    recent_data = df_norm.tail(models_config.input_width)[models_config.variables_used]
-    input_tensor = data_for_prediction_parser(recent_data, input_shape=models_config.input_shape)
+    # Prepare last input window
+    recent_data = df_norm.tail(config["input_width"])[config["variables_used"]]
+    input_tensor = data_for_prediction_parser(
+        recent_data, input_shape=config["input_shape"]
+    )
     input_tensor = torch.tensor(input_tensor, dtype=torch.float32).to(device)
-    #print("Input tensor shape:", input_tensor.shape)
-    # ──🔍 Find model
-    model_path = f"models/{model_name}_{coin}_best.pt"
-    if not os.path.exists(model_path):
-        logging.error(f"❌ Model not found for {coin}")
-        return None
 
-    model_config_ = get_model_config(model_name)
-    # Update config values like label_width if needed
-
-    model = get_model(model_name , **model_config_).to(device)
-
-    model.load_state_dict(torch.load(model_path, map_location=device))
+    # ──🔍 Load model from MLflow Registry
+    model_uri = f"models:/{model_name}/{version}"
+    model = mlflow.pytorch.load_model(model_uri).to(device)
     model.eval()
-
-    
-
-    # ──📅 Create timestamps for predicted steps
+    logging.debug(f"✅ Loaded model from '{model_uri}'") 
+    # ──📈 Make predictions
     with torch.no_grad():
-        #print(model)
-        #raise Exception("Model not loaded correctly")
         preds = model(input_tensor).cpu().numpy()
 
+    # Handle shape
     if preds.ndim == 3 and preds.shape[0] == 1:
         preds = preds[0]  # squeeze batch
     elif preds.ndim == 3:
@@ -69,47 +114,40 @@ def predict(coin: str , model_name="ConvDenseTorch"):
     elif preds.ndim == 1:
         preds = preds.reshape(-1, 1)
 
-    # Transpose if necessary
-    expected_shape = (models_config.label_width, len(models_config.variables_used))
-
-    if preds.shape != expected_shape:
-        
-        raise ValueError(f"❌ Final shape mismatch: got {preds.shape}, expected {expected_shape}")
+ 
+    # ──📅 Create timestamps for predicted steps
     dti_new = pd.date_range(
-    start=df.index[-1] + pd.Timedelta(hours=1),
-    periods=models_config.label_width,
-    freq="h"
+        start=df.index[-1] + pd.Timedelta(hours=1),
+        periods=config["label_width"],
+        freq="h"
     )
-    pred_df = pd.DataFrame(preds, columns=models_config.variables_used, index=dti_new)
-    #raise Exception("Preds and dti_new shapes do not match")
-    
-    #pred_df = pd.DataFrame(preds, models_config.variables_used, index=dti_new)
+    pred_df = pd.DataFrame(preds, columns=config["variables_used"], index=dti_new)
 
-   
-
-
-    # ──📈 Denormalize "close" (example for 1 variable; adapt if more)
+    # ──📈 Denormalize
     denorm_df = pred_df.copy()
-    for var in models_config.variables_used:
-        mean = df[var].shift(models_config.label_width).rolling(window=30).mean().tail(models_config.label_width)
-        std = df[var].shift(models_config.label_width).rolling(window=30).std().tail(models_config.label_width)
+    win_raw = config.get("windows_normalization_length", 30)
+    roll_win = resolve_rolling_window(df.index, win_raw)
+    
+    for var in config["variables_used"]:
 
-        mean.index = dti_new
-        std.index = dti_new
-
+        mean = (
+            df[var]
+            .shift(config["label_width"])
+            .rolling(window=roll_win)
+            .mean()
+            .tail(config["label_width"])
+        )
+        std = (
+            df[var]
+            .shift(config["label_width"])
+            .rolling(window=roll_win)
+            .std()
+            .tail(config["label_width"])
+        )
+        mean.index, std.index = dti_new, dti_new
         denorm_df[var] = pred_df[var] * std + mean
 
     # ──💾 Save result
-    out_path = f"predictions/{coin}.csv"
-    os.makedirs("predictions", exist_ok=True)
+    combined = pd.concat([df["close"].tail(config["input_width"]), denorm_df["close"]])
 
-    # Combine with previous close for plotting
-    
-    combined = pd.concat([df["close"].tail(models_config.input_width), denorm_df["close"]])
-    combined.to_csv(out_path)
-
-    logging.info(f"✅ Saved prediction for {coin} to {out_path}")
     return combined
-
-        
-      

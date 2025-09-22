@@ -1,0 +1,14 @@
+artifact_uri: file:///media/alice/SeagateLinux/alice_backup/btc_forecast/mlruns/606589274086062350/6d212166962041c8918e4404577fa0bc/artifacts
+end_time: 1758400531672
+entry_point_name: ''
+experiment_id: '606589274086062350'
+lifecycle_stage: active
+run_id: 6d212166962041c8918e4404577fa0bc
+run_name: diag_run
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1758400531656
+status: 3
+tags: []
+user_id: alice

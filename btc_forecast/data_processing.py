@@ -2,6 +2,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
+from utils.rolling import resolve_rolling_window
 
 def train_test(df):
     n = len(df)
@@ -16,14 +17,23 @@ def train_test(df):
 
 
 #Normalize data
-def normalize(df, label_width ,window=30):
-  # normalize data
-  df_normalized = df.copy()
-  for value in df.columns:
-    rolling_mean = df_normalized[value].shift(label_width).rolling(window=window).mean()
-    rolling_std = df_normalized[value].shift(label_width).rolling(window=window).std()
-    df_normalized[value] = (df_normalized[value] - rolling_mean) / rolling_std
-  return df_normalized.dropna()
+def normalize(df, label_width, window=30):
+    # Ensure ints (avoids "sequence * Timedelta" errors if args came as strings)
+    label_width = int(label_width)
+    window_int  = int(window)
+
+    df_normalized = df.copy()
+    # Rolling window compatible with DateTimeIndex
+    roll_win = resolve_rolling_window(df.index, window)
+
+
+    for col in df_normalized.columns:
+        s = df_normalized[col]
+        m = s.shift(label_width).rolling(window=roll_win, min_periods=window_int).mean()
+        v = s.shift(label_width).rolling(window=roll_win, min_periods=window_int).std()
+        df_normalized[col] = (s - m) / v
+
+    return df_normalized.dropna()
 
 
 def  data_parser(data):
@@ -54,6 +64,3 @@ def data_for_prediction_parser(df, input_shape):
     return prediction_data.reshape(1, *input_shape)
 
 
-
-# reshape the 'new_data' to match the shape of the training data
-    return df.values.reshape((-1,) + input_shape)

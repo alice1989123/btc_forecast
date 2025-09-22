@@ -25,15 +25,67 @@ DB_PASSWORD = os.getenv("DBPASSWORD")
 DB_NAME = os.getenv("DBNAME")
 
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-def generate_prediction(coin : str , model_name :str) -> List[Dict[str, str]]:
+# --- Logging helpers ---
+_STR_TO_LEVEL = {
+    "CRITICAL": logging.CRITICAL,
+    "ERROR": logging.ERROR,
+    "WARNING": logging.WARNING,
+    "INFO": logging.INFO,
+    "DEBUG": logging.DEBUG,
+    "NOTSET": logging.NOTSET,
+}
+
+def _coerce_level(level_str: str | int | None, default: int = logging.INFO) -> int:
+    if level_str is None:
+        return default
+    if isinstance(level_str, int):
+        return level_str
+    return _STR_TO_LEVEL.get(level_str.upper(), default)
+
+def setup_logging(cli_level: str | None, verbose: int, quiet: int) -> None:
+    level = _coerce_level(os.getenv("LOG_LEVEL"), logging.INFO)
+
+    if verbose == 1:
+        level = logging.INFO
+    elif verbose >= 2:
+        level = logging.DEBUG
+    if quiet > 0:
+        level = logging.WARNING
+
+    if cli_level:
+        level = _coerce_level(cli_level, level)
+
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+        force=True,
+    )
+
+    # ✅ ensure everything is aligned to the chosen level
+    root = logging.getLogger()
+    root.setLevel(level)                                     # <—
+    for h in root.handlers:
+        h.setLevel(level)                                    # <—
+    logging.getLogger(__name__).setLevel(level)              # <—
+
+    # quiet noisy libs (optional)
+    logging.getLogger("botocore").setLevel(max(level, logging.WARNING))
+    logging.getLogger("boto3").setLevel(max(level, logging.WARNING))
+    logging.getLogger("urllib3").setLevel(max(level, logging.WARNING))
+
+    logging.getLogger(__name__).debug("Logging initialized (effective=%s)",
+                                      logging.getLevelName(root.getEffectiveLevel()))
+
+
+
+
+def generate_prediction(coin: str, model_name: str, version: int, config: dict) -> List[Dict[str, str]]:
     data = []
-    prediction = predict.predict(coin , model_name=model_name )
-    
-    for i in range(0, len(prediction)):
-        data.append({'date': prediction.index[i], 'price': prediction.values[i]})
+    prediction = predict.predict(config, coin, model_name=model_name, version=version)
+    for i in range(len(prediction)):
+        data.append({"date": prediction.index[i], "price": prediction.values[i]})
     return data
 
 
@@ -54,6 +106,7 @@ def convert_types(obj):
 
 
 def save_prediction_to_dynamodb(predictions: List[Dict[str, str]], metadata, coin: str):
+
     cleaned_predictions = convert_types(predictions)
     cleaned_metadata = convert_types(metadata)
     
@@ -71,7 +124,7 @@ def save_prediction_to_dynamodb(predictions: List[Dict[str, str]], metadata, coi
         'ttl': ttl  
     })
 def save_prediction_to_postgres(predictions, metadata, coin):
-    conn = psycopg2.connect( #TODO: use environment variables for connection details
+    conn = psycopg2.connect( 
         database=DB_NAME,
         user=DB_USER,
         password=DB_PASSWORD,
@@ -83,8 +136,8 @@ def save_prediction_to_postgres(predictions, metadata, coin):
     now = datetime.now(UTC).isoformat()
 
     model_name = metadata.get('model_name')
-    input_width = int(metadata.get('config_input_width', 0))
-    label_width = int(metadata.get('config_label_width', 12))
+    input_width = int(metadata.get('input_width', 0))
+    label_width = int(metadata.get('label_width', 12))
 
     cursor.execute("""
         INSERT INTO prediction_metadata (id, coin, model_name, input_width, created_at, metadata_json)
@@ -106,35 +159,45 @@ def save_prediction_to_postgres(predictions, metadata, coin):
     conn.close()
 
 
-def get_new_predictions(model_name: str = "ConvDenseTorch"):
-    # List of coins from config
-    coins = config.coins
+
+
+def get_new_predictions(model_name: str, version: int = 1):
     
-    # Iterate through each coin
+    #coins = config.coins # TODO: add
+    coins = [ "BTCUSDT"] # TODO: remove
     for coin in coins:
-        # Generate predictions for the coin
         try:
+          
             logger.info(f"Generating predictions for {coin} using model {model_name}...")
-            logger.info(f"Hello!!!...")        
-        
-            predictions = generate_prediction(coin , model_name=model_name)
-            
-            # Read metadata for the coin
-            metadata_ = metadata.read_metadata(coin , model_name=model_name)
-            metadata_["model_name"] = model_name
-            
-            # Save the predictions to the database
-            #save_prediction_to_db(predictions, metadata_, coin)
-            save_prediction_to_postgres(predictions , metadata_ , coin)
-            save_prediction_to_dynamodb(predictions , metadata_ , coin)
+            params = metadata.get_params(model_name=model_name, version=version)
+            config = {"label_width": int(params.get("label_width")),
+                      "input_width": int(params.get("input_width")),
+                      "variables_used": params.get("variables_used", ["close"]),
+                      "model_name": params.get(model_name, "gru"),
+                      "windows_normalization_length": params.get("windows_normalization_length", 30),
+                      "input_shape" : (int(params.get("input_width")), len(params.get("variables_used", ["close"])) )
+                      }
+            logger.debug(f"Using config: {config}")
+            predictions = generate_prediction(coin, model_name=model_name, version=version , config=config)
+            save_prediction_to_postgres(predictions, config, coin)
+            save_prediction_to_dynamodb(predictions, config, coin)
 
         except Exception as e:
             logger.error(f"Error generating predictions for {coin}: {e}")
             continue
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run predictions and upload to DynamoDB.")
-    parser.add_argument("--model_name", type=str, default="ConvDenseTorch", help="Model to use for prediction.")
+    parser = argparse.ArgumentParser(description="Run predictions and upload to DynamoDB/Postgres.")
+    parser.add_argument("--model_name", type=str, default="gru", help="Registered model name (no version suffix).")
+    parser.add_argument("--version", type=int, default=1, help="Model version to load from MLflow registry.")
+    # --- Logging flags ---
+    parser.add_argument("--log-level", choices=[k.lower() for k in _STR_TO_LEVEL.keys()],
+                        help="Set log level (overrides -v/--quiet and LOG_LEVEL env).")
+    parser.add_argument("-v", "--verbose", action="count", default=0,
+                        help="-v for INFO, -vv for DEBUG (ignored if --log-level used).")
+    parser.add_argument("-q", "--quiet", action="count", default=0,
+                        help="Reduce output (WARNING+) (ignored if --log-level used).")
     args = parser.parse_args()
 
-    get_new_predictions(model_name=args.model_name)
+    setup_logging(args.log_level, args.verbose, args.quiet)
+    get_new_predictions(model_name=args.model_name, version=args.version)
