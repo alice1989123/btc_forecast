@@ -2,12 +2,12 @@ import os
 import datetime
 from datetime import timedelta as td
 import pandas as pd
-from binance_data import get_binance_data
+from btc_forecast.binance_data import get_binance_data
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "Data")
 os.makedirs(DATA_DIR, exist_ok=True)
 
-from data_processing import data_parser  # make sure to import this!
+from btc_forecast.data_processing import data_parser  # make sure to import this!
 
 
 

@@ -98,7 +98,7 @@ def predict(config :dict , coin: str, model_name: str, version: int = 1, *,
     input_tensor = torch.tensor(input_tensor, dtype=torch.float32).to(device)
 
     # ──🔍 Load model from MLflow Registry
-    model_uri = f"models:/{model_name}/{version}"
+    model_uri = f"models:/{model_name}-{coin}/{version}".lower()
     model = mlflow.pytorch.load_model(model_uri).to(device)
     model.eval()
     logging.debug(f"✅ Loaded model from '{model_uri}'") 

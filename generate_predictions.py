@@ -1,7 +1,7 @@
 from btc_forecast import predict
 import datetime
 from typing import List, Dict
-import config.config as config
+from config.config import coins 
 import metadata
 import boto3
 from datetime import datetime, UTC
@@ -17,6 +17,7 @@ import json
 import logging
 import os
 import dotenv
+
 dotenv.load_dotenv(".keys.env")
 
 DB_HOST = os.getenv("DBHOST")
@@ -138,7 +139,7 @@ def save_prediction_to_postgres(predictions, metadata, coin):
     model_name = metadata.get('model_name')
     input_width = int(metadata.get('input_width', 0))
     label_width = int(metadata.get('label_width', 12))
-
+    #TODO: improve metadata storage
     cursor.execute("""
         INSERT INTO prediction_metadata (id, coin, model_name, input_width, created_at, metadata_json)
         VALUES (%s, %s, %s, %s, %s, %s)
@@ -163,19 +164,24 @@ def save_prediction_to_postgres(predictions, metadata, coin):
 
 def get_new_predictions(model_name: str, version: int = 1):
     
-    #coins = config.coins # TODO: add
-    coins = [ "BTCUSDT"] # TODO: remove
     for coin in coins:
         try:
           
             logger.info(f"Generating predictions for {coin} using model {model_name}...")
-            params = metadata.get_params(model_name=model_name, version=version)
+            info = metadata.get_model_info(model_name=f"{model_name}-{coin}".lower(), version=version)
+            params = info.get("params", {})
+            logger.debug(f"Model_params: {params}")
+            metrics = info.get("metrics", {})
+            logger.debug(f"Model_metrics: {metrics}")
             config = {"label_width": int(params.get("label_width")),
                       "input_width": int(params.get("input_width")),
                       "variables_used": params.get("variables_used", ["close"]),
                       "model_name": params.get(model_name, "gru"),
                       "windows_normalization_length": params.get("windows_normalization_length", 30),
-                      "input_shape" : (int(params.get("input_width")), len(params.get("variables_used", ["close"])) )
+                      "input_shape" : (int(params.get("input_width")), len(params.get("variables_used", ["close"])) ),
+                      "val_loss" : metrics.get("val_loss", None),
+                      "mae" : metrics.get("final_mae_per_step", None)
+
                       }
             logger.debug(f"Using config: {config}")
             predictions = generate_prediction(coin, model_name=model_name, version=version , config=config)
