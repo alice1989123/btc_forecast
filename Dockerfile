@@ -28,7 +28,14 @@ COPY requirements.txt .
 RUN python3.11 -m pip install --no-cache-dir -r requirements.txt
 
 # Copy source code
-COPY . .
+COPY btc_forecast .
+COPY config .
+COPY logs .
+COPY generate_predictions.py .
+COPY train_models.py .
+COPY metadata.py .
+COPY utils.py .
+COPY download_artifacts.py .
 
 RUN python3.11 -m pip install  psycopg2-binary
 
