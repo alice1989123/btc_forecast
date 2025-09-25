@@ -176,7 +176,7 @@ def get_new_predictions(model_name: str, version: int = 1):
             config = {"label_width": int(params.get("label_width")),
                       "input_width": int(params.get("input_width")),
                       "variables_used": params.get("variables_used", ["close"]),
-                      "model_name": params.get(model_name, "gru"),
+                      "model_name": model_name,
                       "windows_normalization_length": params.get("windows_normalization_length", 30),
                       "input_shape" : (int(params.get("input_width")), len(params.get("variables_used", ["close"])) ),
                       "val_loss" : metrics.get("val_loss", None),
@@ -194,7 +194,7 @@ def get_new_predictions(model_name: str, version: int = 1):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run predictions and upload to DynamoDB/Postgres.")
-    parser.add_argument("--model_name", type=str, default="gru", help="Registered model name (no version suffix).")
+    parser.add_argument("--model_name", type=str, default="GRU", help="Registered model name (no version suffix).")
     parser.add_argument("--version", type=int, default=1, help="Model version to load from MLflow registry.")
     # --- Logging flags ---
     parser.add_argument("--log-level", choices=[k.lower() for k in _STR_TO_LEVEL.keys()],

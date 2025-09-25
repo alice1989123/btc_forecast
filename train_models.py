@@ -32,7 +32,7 @@ TRACKING_URI = os.getenv("TRACKING_URI")
 mlflow.set_tracking_uri(TRACKING_URI)
 
 # 3) Select experiment
-mlflow.set_experiment("GRU_ALL_COINS_V1")
+mlflow.set_experiment("GRU_ALL_COINS_V2")
 
 import json, inspect
 
@@ -411,7 +411,7 @@ for (variables_used, input_width, label_width, batch_size,
                     sample_out = model_to_log(torch.from_numpy(input_example))
                 signature = infer_signature(input_example, sample_out.cpu().numpy())
                 pip_reqs = ["mlflow", "torch==2.5.1", "numpy>=1.24,<3", "pandas>=2.0,<3", "scikit-learn>=1.3,<2"]
-                reg_name = f"gru-{coin.lower()}" 
+                reg_name = f"GRU-{coin.lower()}" 
 
                 mlflow.pytorch.log_model(
                     model_to_log,
