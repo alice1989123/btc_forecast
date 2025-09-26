@@ -13,7 +13,7 @@ COPY logs ./logs
 COPY generate_predictions.py .
 COPY train_models.py .
 COPY metadata.py .
-COPY utils .
+COPY utils ./utils
 
 # Default command
 CMD ["python", "generate_predictions.py", "--model_name=LSTMModel"]

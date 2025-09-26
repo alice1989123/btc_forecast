@@ -19,6 +19,8 @@ spec:
             name: db-creds
         - secretRef:
             name: aws-credentials-dynamo
+        - secretRef:
+            name: mlflow-credentials    
       resources:
         requests:
           memory: "512Mi"
