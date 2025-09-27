@@ -206,4 +206,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     setup_logging(args.log_level, args.verbose, args.quiet)
-    get_new_predictions(model_name=args.model_name, version=args.version, coin=args.sybol)
+    get_new_predictions(model_name=args.model_name, version=args.version, coin=args.symbol)
