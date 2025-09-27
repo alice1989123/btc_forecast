@@ -162,40 +162,40 @@ def save_prediction_to_postgres(predictions, metadata, coin):
 
 
 
-def get_new_predictions(model_name: str, version: int = 1):
-    
-    for coin in coins:
-        try:
-          
-            logger.info(f"Generating predictions for {coin} using model {model_name}...")
-            info = metadata.get_model_info(model_name=f"{model_name}-{coin}".lower(), version=version)
-            params = info.get("params", {})
-            logger.debug(f"Model_params: {params}")
-            metrics = info.get("metrics", {})
-            logger.debug(f"Model_metrics: {metrics}")
-            config = {"label_width": int(params.get("label_width")),
-                      "input_width": int(params.get("input_width")),
-                      "variables_used": params.get("variables_used", ["close"]),
-                      "model_name": model_name,
-                      "windows_normalization_length": params.get("windows_normalization_length", 30),
-                      "input_shape" : (int(params.get("input_width")), len(params.get("variables_used", ["close"])) ),
-                      "val_loss" : metrics.get("val_loss", None),
-                      "mae" : metrics.get("final_mae_per_step", None)
+def get_new_predictions(model_name: str, version: int = 1 , coin: str = "BTCUSDT"):
+    try:
+        
+        logger.info(f"Generating predictions for {coin} using model {model_name}...")
+        info = metadata.get_model_info(model_name=f"{model_name}-{coin}".lower(), version=version)
+        params = info.get("params", {})
+        logger.debug(f"Model_params: {params}")
+        metrics = info.get("metrics", {})
+        logger.debug(f"Model_metrics: {metrics}")
+        config = {"label_width": int(params.get("label_width")),
+                    "input_width": int(params.get("input_width")),
+                    "variables_used": params.get("variables_used", ["close"]),
+                    "model_name": model_name,
+                    "windows_normalization_length": params.get("windows_normalization_length", 30),
+                    "input_shape" : (int(params.get("input_width")), len(params.get("variables_used", ["close"])) ),
+                    "val_loss" : metrics.get("val_loss", None),
+                    "mae" : metrics.get("final_mae_per_step", None)
 
-                      }
-            logger.debug(f"Using config: {config}")
-            predictions = generate_prediction(coin, model_name=model_name, version=version , config=config)
-            save_prediction_to_postgres(predictions, config, coin)
-            save_prediction_to_dynamodb(predictions, config, coin)
+                    }
+        logger.debug(f"Using config: {config}")
+        predictions = generate_prediction(coin, model_name=model_name, version=version , config=config)
+        save_prediction_to_postgres(predictions, config, coin)
+        save_prediction_to_dynamodb(predictions, config, coin)
 
-        except Exception as e:
-            logger.error(f"Error generating predictions for {coin}: {e}")
-            continue
+    except Exception as e:
+        logger.error(f"Error generating predictions for {coin}: {e}")
+            
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run predictions and upload to DynamoDB/Postgres.")
     parser.add_argument("--model_name", type=str, default="GRU", help="Registered model name (no version suffix).")
     parser.add_argument("--version", type=int, default=1, help="Model version to load from MLflow registry.")
+    parser.add_argument("--coin", type=int, default=1, help="Coin ID to generate predictions for.")
+
     # --- Logging flags ---
     parser.add_argument("--log-level", choices=[k.lower() for k in _STR_TO_LEVEL.keys()],
                         help="Set log level (overrides -v/--quiet and LOG_LEVEL env).")
@@ -206,4 +206,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     setup_logging(args.log_level, args.verbose, args.quiet)
-    get_new_predictions(model_name=args.model_name, version=args.version)
+    get_new_predictions(model_name=args.model_name, version=args.version, coin=args.coin)
