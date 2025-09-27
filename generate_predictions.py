@@ -194,7 +194,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run predictions and upload to DynamoDB/Postgres.")
     parser.add_argument("--model_name", type=str, default="GRU", help="Registered model name (no version suffix).")
     parser.add_argument("--version", type=int, default=1, help="Model version to load from MLflow registry.")
-    parser.add_argument("--coin", type=int, default=1, help="Coin ID to generate predictions for.")
+    parser.add_argument("--symbol", type=int, default=1, help="Coin ID to generate predictions for.")
 
     # --- Logging flags ---
     parser.add_argument("--log-level", choices=[k.lower() for k in _STR_TO_LEVEL.keys()],
@@ -206,4 +206,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     setup_logging(args.log_level, args.verbose, args.quiet)
-    get_new_predictions(model_name=args.model_name, version=args.version, coin=args.coin)
+    get_new_predictions(model_name=args.model_name, version=args.version, coin=args.sybol)
