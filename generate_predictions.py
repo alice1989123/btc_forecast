@@ -24,6 +24,7 @@ DB_HOST = os.getenv("DBHOST")
 DB_USER = os.getenv("DBUSER")
 DB_PASSWORD = os.getenv("DBPASSWORD")
 DB_NAME = os.getenv("DBNAME")
+AWS_DEFAULT_REGION = os.getenv("AWS_DEFAULT_REGION", "mx-central-1")
 
 
 logger = logging.getLogger(__name__)
@@ -114,7 +115,7 @@ def save_prediction_to_dynamodb(predictions: List[Dict[str, str]], metadata, coi
     # TTL: auto-expire in 12 hours (43200 seconds)
     ttl = int(time.time()) + 12 * 3600  # current epoch time + 12 hours
 
-    dynamodb = boto3.resource('dynamodb', region_name='eu-central-1')
+    dynamodb = boto3.resource('dynamodb', region_name=AWS_DEFAULT_REGION)
     table = dynamodb.Table('crypto_predictions_')
 
     table.put_item(Item={
