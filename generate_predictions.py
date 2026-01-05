@@ -166,10 +166,10 @@ def save_prediction_to_postgres(predictions, metadata, coin):
 
 
 
-def get_new_predictions(model_name: str, version: int = 1 , coin: str = "BTCUSDT"):
+def get_new_predictions(model_name: str, version: int = 1 , coin: str = "BTCUSDT", interval: str = ""):
     try:
-        interval = os.getenv("INTERVAL", "4h")
-        if not interval:
+        
+        if interval == "":
             raise ValueError("Interval not specified in config or environment variable.")
         logger.info("Generating predictions | coin=%s model=%s interval=%s version=%s",
                     coin, model_name, interval, version)
@@ -191,6 +191,8 @@ if __name__ == "__main__":
     parser.add_argument("--model_name", type=str, default="GRU", help="Registered model name (no version suffix).")
     parser.add_argument("--version", type=int, default=1, help="Model version to load from MLflow registry.")
     parser.add_argument("--symbol", type=str, default="BTCUSDT", help="Coin ID to generate predictions for.")
+    parser.add_argument("--interval", type=str, default="", help="Interval (e.g., '4h'). Overrides config if set.")
+
 
     # --- Logging flags ---
     parser.add_argument("--log-level", choices=[k.lower() for k in _STR_TO_LEVEL.keys()],
@@ -202,4 +204,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     setup_logging(args.log_level, args.verbose, args.quiet)
-    get_new_predictions(model_name=args.model_name, version=args.version, coin=args.symbol)
+    get_new_predictions(model_name=args.model_name, version=args.version, coin=args.symbol, interval=args.interval)
