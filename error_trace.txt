@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "/media/alice/SeagateLinux/alice_backup/btc_forecast/./train_models.py", line 355, in <module>
+    df = load_or_download(coin)
+         ^^^^^^^^^^^^^^^^^^^^^^
+TypeError: load_or_download() missing 1 required positional argument: 'interval'

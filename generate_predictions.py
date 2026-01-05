@@ -1,11 +1,10 @@
 from btc_forecast import predict
 import datetime
 from typing import List, Dict
-from config.config import coins 
-import metadata
+import model_info
 import boto3
 from datetime import datetime, UTC
-
+import numpy as np
 from typing import List, Dict
 import pandas as pd
 from decimal import Decimal
@@ -98,9 +97,9 @@ def convert_types(obj):
         return [convert_types(v) for v in obj]
     elif isinstance(obj, float):
         return Decimal(str(obj))
+    elif isinstance(obj, (np.floating, np.integer)):   # ✅ optional but recommended
+        return obj.item()
     elif isinstance(obj, pd.Timestamp):
-        
-        
         return obj.isoformat()
     else:
         return obj
@@ -126,7 +125,11 @@ def save_prediction_to_dynamodb(predictions: List[Dict[str, str]], metadata, coi
         'ttl': ttl  
     })
 def save_prediction_to_postgres(predictions, metadata, coin):
-    conn = psycopg2.connect( 
+    interval = metadata.get("interval")
+    if not interval:
+        raise ValueError("metadata.interval is required (do not default; prevents mixing intervals).")
+
+    conn = psycopg2.connect(
         database=DB_NAME,
         user=DB_USER,
         password=DB_PASSWORD,
@@ -137,24 +140,24 @@ def save_prediction_to_postgres(predictions, metadata, coin):
     pred_id = str(uuid.uuid4())
     now = datetime.now(UTC).isoformat()
 
-    model_name = metadata.get('model_name')
-    input_width = int(metadata.get('input_width', 0))
-    label_width = int(metadata.get('label_width', 12))
-    #TODO: improve metadata storage
-    cursor.execute("""
-        INSERT INTO prediction_metadata (id, coin, model_name, input_width, created_at, metadata_json)
-        VALUES (%s, %s, %s, %s, %s, %s)
-    """, (pred_id, coin, model_name, input_width, now, json.dumps(metadata)))
+    model_name = metadata.get("model_name")
+    input_width = int(metadata.get("input_width", 0))
 
-    # Save each prediction with is_predicted flag
+    cursor.execute("""
+        INSERT INTO prediction_metadata (id, coin, model_name, interval, input_width, created_at, metadata_json)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
+    """, (pred_id, coin, model_name, interval, input_width, now, json.dumps(metadata)))
+
+    label_width = int(metadata.get("label_width", 12))
     for i, p in enumerate(predictions):
-        date_str = p['date']
-        price_val = float(p['price'])
+        date_str = p["date"]
+        price_val = float(p["price"])
         is_predicted = (i >= len(predictions) - label_width)
+
         cursor.execute("""
             INSERT INTO predicted_prices (id, prediction_time, price, is_historical)
             VALUES (%s, %s, %s, %s)
-        """, (pred_id, date_str, price_val, not is_predicted))  # `is_historical = not is_predicted`
+        """, (pred_id, date_str, price_val, not is_predicted))
 
     conn.commit()
     cursor.close()
@@ -165,30 +168,22 @@ def save_prediction_to_postgres(predictions, metadata, coin):
 
 def get_new_predictions(model_name: str, version: int = 1 , coin: str = "BTCUSDT"):
     try:
-        
-        logger.info(f"Generating predictions for {coin} using model {model_name}...")
-        info = metadata.get_model_info(model_name=f"{model_name}-{coin}".lower(), version=version)
-        params = info.get("params", {})
-        logger.debug(f"Model_params: {params}")
-        metrics = info.get("metrics", {})
-        logger.debug(f"Model_metrics: {metrics}")
-        config = {"label_width": int(params.get("label_width")),
-                    "input_width": int(params.get("input_width")),
-                    "variables_used": params.get("variables_used", ["close"]),
-                    "model_name": model_name,
-                    "windows_normalization_length": params.get("windows_normalization_length", 30),
-                    "input_shape" : (int(params.get("input_width")), len(params.get("variables_used", ["close"])) ),
-                    "val_loss" : metrics.get("val_loss", None),
-                    "mae" : metrics.get("final_mae_per_step", None)
+        interval = os.getenv("INTERVAL", "4h")
+        if not interval:
+            raise ValueError("Interval not specified in config or environment variable.")
+        logger.info("Generating predictions | coin=%s model=%s interval=%s version=%s",
+                    coin, model_name, interval, version)
 
-                    }
-        logger.debug(f"Using config: {config}")
-        predictions = generate_prediction(coin, model_name=model_name, version=version , config=config)
+        config = model_info.build_predict_config(model_name=model_name, coin=coin, interval=interval, version=version)
+        logger.debug("Using config: %s", config)
+
+        predictions = generate_prediction(coin, model_name=model_name, version=version, config=config)
+
         save_prediction_to_postgres(predictions, config, coin)
         save_prediction_to_dynamodb(predictions, config, coin)
 
-    except Exception as e:
-        logger.error(f"Error generating predictions for {coin}: {e}")
+    except Exception:
+        logger.exception("Error generating predictions for %s", coin) 
             
 
 if __name__ == "__main__":

@@ -27,13 +27,13 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 TRACKING_URI = os.getenv("TRACKING_URI")
-
-
+INTERVAL = os.getenv("INTERVAL", "4h")
+MODEL_NAME = "GRU" 
+interval_str = str(INTERVAL)
 mlflow.set_tracking_uri(TRACKING_URI)
 
 # 3) Select experiment
-mlflow.set_experiment("GRU_ALL_COINS_V2")
-
+mlflow.set_experiment(f"{MODEL_NAME}_ALL_COINS_V4_{interval_str}")
 import json, inspect
 
 def log_model_architecture(model, input_width, num_features, label_width, extra_config=None):
@@ -187,6 +187,7 @@ for (variables_used, input_width, label_width, batch_size,
     def train_model(
         coin,
         model,
+        interval =INTERVAL,
         input_width=200,
         label_width=12,
         lr=1e-3,
@@ -197,7 +198,7 @@ for (variables_used, input_width, label_width, batch_size,
 
     
 
-        df = load_or_download(coin)
+        df = load_or_download(coin,interval)
         #if 'volume' in df.columns:
         #    df["volume"] = np.log1p(df["volume"])
         #df_norm = normalize(df, label_width=label_width, window=30)
@@ -265,7 +266,7 @@ for (variables_used, input_width, label_width, batch_size,
 
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
-                best_weights = model.state_dict()
+                best_weights = copy.deepcopy(model.state_dict())
                 early_stop_counter = 0
             else:
                 early_stop_counter += 1
@@ -276,7 +277,6 @@ for (variables_used, input_width, label_width, batch_size,
         return model, best_weights, train_losses, val_losses , scaler
   
 
-  
 
     for model in models:
         run_name = (
@@ -286,33 +286,34 @@ for (variables_used, input_width, label_width, batch_size,
             f"|win{windows_normalization_length}"
             f"|feat{len(variables_used)}"
             f"|{coin}"
+            f"|{interval_str}"
         )
 
         with mlflow.start_run(run_name=run_name):
             try: 
                 mlflow.log_params({
-                    "model_class": model.__class__.__name__,
-                    "num_features": len(variables_used),
-                    "input_width": input_width,
-                    "label_width": label_width,
-                    "batch_size": batch_size,
-                    "learning_rate": learning_rate,
-                    "num_epochs": num_epochs,
-                    "windows_normalization_length": windows_normalization_length,
-                    "coin": coin,                     
-                })
+                "model_class": str(model.__class__.__name__),
+                "num_features": int(len(variables_used)),
+                "input_width": int(input_width),
+                "label_width": int(label_width),
+                "batch_size": int(batch_size),
+                "learning_rate": float(learning_rate),
+                "num_epochs": int(num_epochs),
+                "windows_normalization_length": int(windows_normalization_length),
+                "coin": str(coin),
+                "interval": interval_str,
+                "variables_used": json.dumps(list(variables_used)),  # ✅ IMPORTANT
+            })
                 # Per-feature boolean params
                 for f in base_features:
                     mlflow.log_param(f"feature_{f}", str(f in variables_used))
                 mlflow.set_tags({
-                    "project": "crypto-forecast",
+                    "Model": str(model.__class__.__name__),
+                    "Coin": str(coin),
+                    "Interval": str(interval_str),
+                    "status": "success",
                 })
-                 # Log metadata as tags
-                mlflow.set_tags({
-                    "Model": model.__class__.__name__,
-                    "Coin": coin,
-                    "status": "success",   # or failed if exception
-                })
+             
                 # Log the architecture early (pre-training is fine)
                 extra_cfg = {}
                 if hasattr(model, "gru"):              # GRUStacked
@@ -348,7 +349,7 @@ for (variables_used, input_width, label_width, batch_size,
                 model.eval()
 
                 # ---- Eval (unchanged logic, now runs with best weights) ----
-                df = load_or_download(coin)
+                df = load_or_download(coin, interval_str)
                 _, _, validate_raw = train_test(df[variables_used])
 
                 test_df_zscore = normalize(validate_raw, label_width, window=windows_normalization_length)
@@ -381,6 +382,7 @@ for (variables_used, input_width, label_width, batch_size,
 
                 denorm_preds = np.zeros_like(preds_zscore)
                 denorm_targets = np.zeros_like(targets_zscore)
+                
                 for i in range(preds_zscore.shape[0]):
                     for j in range(label_width):
                         idx = i + j + input_width
@@ -389,12 +391,21 @@ for (variables_used, input_width, label_width, batch_size,
                         denorm_preds[i, j]   = preds_zscore[i, j] * std + mean
                         denorm_targets[i, j] = targets_zscore[i, j] * std + mean
 
+                mae_steps = np.mean(np.abs(denorm_targets - denorm_preds), axis=0)  # shape: (label_width,)
+                
+                mlflow.log_dict(
+                    {"mae_per_step": [float(x) for x in mae_steps]},
+                    artifact_file="metrics/mae_per_step.json",
+                )
+                for step, v in enumerate(mae_steps, start=1):
+                    mlflow.log_metric(f"mae_step_{step:02d}", float(v))
                 
                 mae  = mean_absolute_error(denorm_targets.flatten(), denorm_preds.flatten())
                 rmse = np.sqrt(mean_squared_error(denorm_targets.flatten(), denorm_preds.flatten()))
-
-                mlflow.log_metric("final_mae", float(mae))
-                mlflow.log_metric("final_rmse", float(rmse))
+                mlflow.log_metric("mae_steps_mean", float(mae_steps.mean())) 
+                mlflow.log_metric("mae_steps_median", float(np.median(mae_steps)))
+                mlflow.log_metric("final_mae", float(mae)) #TODO remove
+                mlflow.log_metric("final_rmse", float(rmse)) #TODO remove
                 mlflow.log_metric("final_mae_per_step", float(mae / label_width))
                 mlflow.log_metric("final_rmse_per_step", float(rmse / label_width))
                 mlflow.log_metric("train_loss_last", float(train_l[-1]))
@@ -411,7 +422,7 @@ for (variables_used, input_width, label_width, batch_size,
                     sample_out = model_to_log(torch.from_numpy(input_example))
                 signature = infer_signature(input_example, sample_out.cpu().numpy())
                 pip_reqs = ["mlflow", "torch==2.5.1", "numpy>=1.24,<3", "pandas>=2.0,<3", "scikit-learn>=1.3,<2"]
-                reg_name = f"GRU-{coin.lower()}" 
+                reg_name = f"{MODEL_NAME}-{coin}-{interval_str}".lower()
 
                 mlflow.pytorch.log_model(
                     model_to_log,
