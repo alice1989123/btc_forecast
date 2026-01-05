@@ -91,6 +91,7 @@ def generate_prediction(coin: str, model_name: str, version: int, config: dict) 
 
 
 def convert_types(obj):
+
     if isinstance(obj, dict):
         return {k: convert_types(v) for k, v in obj.items()}
     elif isinstance(obj, list):

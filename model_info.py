@@ -50,6 +50,8 @@ def build_predict_config(model_name: str, coin: str, interval: str, *, version: 
         logger.warning("variables_used empty after parsing. Falling back to ['close'].")
         variables_used = ["close"]
 
+    mae_per_step = [metrics.get(f"mae_step_{i:02d}") for i in range(1, label_width + 1)]
+    mae_per_step = [float(x) for x in mae_per_step if x is not None]
     cfg = {
         "interval": interval,
         "model_name": model_name,  # keep base model name for your pipeline
@@ -60,6 +62,7 @@ def build_predict_config(model_name: str, coin: str, interval: str, *, version: 
         "input_shape": (input_width, len(variables_used)),
         "val_loss": metrics.get("val_loss"),
         "mae": metrics.get("final_mae_per_step"),
+        "mae_per_step": mae_per_step, 
     }
 
     logger.info(
