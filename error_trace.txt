@@ -1,103 +1,21 @@
 Traceback (most recent call last):
-  File "/media/alice/SeagateLinux/alice_backup/btc_forecast/envs/.env_inf/lib/python3.11/site-packages/urllib3/connectionpool.py", line 534, in _make_request
-    response = conn.getresponse()
-               ^^^^^^^^^^^^^^^^^^
-  File "/media/alice/SeagateLinux/alice_backup/btc_forecast/envs/.env_inf/lib/python3.11/site-packages/urllib3/connection.py", line 516, in getresponse
-    httplib_response = super().getresponse()
-                       ^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/lib/python3.11/http/client.py", line 1395, in getresponse
-    response.begin()
-  File "/usr/lib/python3.11/http/client.py", line 325, in begin
-    version, status, reason = self._read_status()
-                              ^^^^^^^^^^^^^^^^^^^
-  File "/usr/lib/python3.11/http/client.py", line 286, in _read_status
-    line = str(self.fp.readline(_MAXLINE + 1), "iso-8859-1")
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/lib/python3.11/socket.py", line 718, in readinto
-    return self._sock.recv_into(b)
-           ^^^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/lib/python3.11/ssl.py", line 1314, in recv_into
-    return self.read(nbytes, buffer)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/lib/python3.11/ssl.py", line 1166, in read
-    return self._sslobj.read(len, buffer)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-TimeoutError: The read operation timed out
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/media/alice/SeagateLinux/alice_backup/btc_forecast/envs/.env_inf/lib/python3.11/site-packages/requests/adapters.py", line 667, in send
-    resp = conn.urlopen(
-           ^^^^^^^^^^^^^
-  File "/media/alice/SeagateLinux/alice_backup/btc_forecast/envs/.env_inf/lib/python3.11/site-packages/urllib3/connectionpool.py", line 841, in urlopen
-    retries = retries.increment(
-              ^^^^^^^^^^^^^^^^^^
-  File "/media/alice/SeagateLinux/alice_backup/btc_forecast/envs/.env_inf/lib/python3.11/site-packages/urllib3/util/retry.py", line 474, in increment
-    raise reraise(type(error), error, _stacktrace)
-          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/media/alice/SeagateLinux/alice_backup/btc_forecast/envs/.env_inf/lib/python3.11/site-packages/urllib3/util/util.py", line 39, in reraise
-    raise value
-  File "/media/alice/SeagateLinux/alice_backup/btc_forecast/envs/.env_inf/lib/python3.11/site-packages/urllib3/connectionpool.py", line 787, in urlopen
-    response = self._make_request(
-               ^^^^^^^^^^^^^^^^^^^
-  File "/media/alice/SeagateLinux/alice_backup/btc_forecast/envs/.env_inf/lib/python3.11/site-packages/urllib3/connectionpool.py", line 536, in _make_request
-    self._raise_timeout(err=e, url=url, timeout_value=read_timeout)
-  File "/media/alice/SeagateLinux/alice_backup/btc_forecast/envs/.env_inf/lib/python3.11/site-packages/urllib3/connectionpool.py", line 367, in _raise_timeout
-    raise ReadTimeoutError(
-urllib3.exceptions.ReadTimeoutError: HTTPSConnectionPool(host='api.binance.com', port=443): Read timed out. (read timeout=10)
-
-During handling of the above exception, another exception occurred:
-
-Traceback (most recent call last):
   File "/media/alice/SeagateLinux/alice_backup/btc_forecast/./train_models.py", line 335, in <module>
     model, weights, train_l, val_l, scaler = train_model(
                                              ^^^^^^^^^^^^
-  File "/media/alice/SeagateLinux/alice_backup/btc_forecast/./train_models.py", line 201, in train_model
-    df = load_or_download(coin,interval)
-         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/media/alice/SeagateLinux/alice_backup/btc_forecast/btc_forecast/data_loader.py", line 35, in load_or_download
-    return download_and_save(coin , interval)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/media/alice/SeagateLinux/alice_backup/btc_forecast/btc_forecast/data_loader.py", line 23, in download_and_save
-    raw_data = get_binance_data(coin, start_time, end_time , interval)
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/media/alice/SeagateLinux/alice_backup/btc_forecast/btc_forecast/binance_data.py", line 38, in get_binance_data
-    return _client.get_historical_klines(
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/media/alice/SeagateLinux/alice_backup/btc_forecast/envs/.env_inf/lib/python3.11/site-packages/binance/client.py", line 984, in get_historical_klines
-    return self._historical_klines(
+  File "/media/alice/SeagateLinux/alice_backup/btc_forecast/./train_models.py", line 255, in train_model
+    for xb, yb in val_loader:
+  File "/media/alice/SeagateLinux/alice_backup/btc_forecast/envs/.env_inf/lib/python3.11/site-packages/torch/utils/data/dataloader.py", line 701, in __next__
+    data = self._next_data()
+           ^^^^^^^^^^^^^^^^^
+  File "/media/alice/SeagateLinux/alice_backup/btc_forecast/envs/.env_inf/lib/python3.11/site-packages/torch/utils/data/dataloader.py", line 756, in _next_data
+    index = self._next_index()  # may raise StopIteration
+            ^^^^^^^^^^^^^^^^^^
+  File "/media/alice/SeagateLinux/alice_backup/btc_forecast/envs/.env_inf/lib/python3.11/site-packages/torch/utils/data/dataloader.py", line 691, in _next_index
+    return next(self._sampler_iter)  # may raise StopIteration
            ^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/media/alice/SeagateLinux/alice_backup/btc_forecast/envs/.env_inf/lib/python3.11/site-packages/binance/client.py", line 1023, in _historical_klines
-    first_valid_ts = self._get_earliest_valid_timestamp(symbol, interval, klines_type)
-                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/media/alice/SeagateLinux/alice_backup/btc_forecast/envs/.env_inf/lib/python3.11/site-packages/binance/client.py", line 954, in _get_earliest_valid_timestamp
-    kline = self._klines(
-            ^^^^^^^^^^^^^
-  File "/media/alice/SeagateLinux/alice_backup/btc_forecast/envs/.env_inf/lib/python3.11/site-packages/binance/client.py", line 933, in _klines
-    return self.get_klines(**params)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/media/alice/SeagateLinux/alice_backup/btc_forecast/envs/.env_inf/lib/python3.11/site-packages/binance/client.py", line 918, in get_klines
-    return self._get('klines', data=params, version=self.PRIVATE_API_VERSION)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/media/alice/SeagateLinux/alice_backup/btc_forecast/envs/.env_inf/lib/python3.11/site-packages/binance/client.py", line 414, in _get
-    return self._request_api('get', path, signed, version, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/media/alice/SeagateLinux/alice_backup/btc_forecast/envs/.env_inf/lib/python3.11/site-packages/binance/client.py", line 377, in _request_api
-    return self._request(method, uri, signed, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/media/alice/SeagateLinux/alice_backup/btc_forecast/envs/.env_inf/lib/python3.11/site-packages/binance/client.py", line 357, in _request
-    self.response = getattr(self.session, method)(uri, **kwargs)
-                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/media/alice/SeagateLinux/alice_backup/btc_forecast/envs/.env_inf/lib/python3.11/site-packages/requests/sessions.py", line 602, in get
-    return self.request("GET", url, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/media/alice/SeagateLinux/alice_backup/btc_forecast/envs/.env_inf/lib/python3.11/site-packages/requests/sessions.py", line 589, in request
-    resp = self.send(prep, **send_kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/media/alice/SeagateLinux/alice_backup/btc_forecast/envs/.env_inf/lib/python3.11/site-packages/requests/sessions.py", line 703, in send
-    r = adapter.send(request, **kwargs)
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/media/alice/SeagateLinux/alice_backup/btc_forecast/envs/.env_inf/lib/python3.11/site-packages/requests/adapters.py", line 713, in send
-    raise ReadTimeout(e, request=request)
-requests.exceptions.ReadTimeout: HTTPSConnectionPool(host='api.binance.com', port=443): Read timed out. (read timeout=10)
+  File "/media/alice/SeagateLinux/alice_backup/btc_forecast/envs/.env_inf/lib/python3.11/site-packages/torch/utils/data/sampler.py", line 347, in __iter__
+    for idx in self.sampler:
+  File "/media/alice/SeagateLinux/alice_backup/btc_forecast/envs/.env_inf/lib/python3.11/site-packages/torch/utils/data/sampler.py", line 125, in __iter__
+    return iter(range(len(self.data_source)))
+                      ^^^^^^^^^^^^^^^^^^^^^
+ValueError: __len__() should return >= 0

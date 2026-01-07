@@ -27,7 +27,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 TRACKING_URI = os.getenv("TRACKING_URI")
-INTERVAL = os.getenv("INTERVAL", "4h")
+INTERVAL = os.getenv("INTERVAL")
 MODEL_NAME = "GRU" 
 interval_str = str(INTERVAL)
 mlflow.set_tracking_uri(TRACKING_URI)
