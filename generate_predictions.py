@@ -395,26 +395,26 @@ def main() -> None:
     if args.symbol == "ALL":
         for coin in coins:
             registry_name = f"{args.model_name}-{coin}-{args.interval}".lower()
-
-            if args.version == 0:
-                args.version = get_latest_mlflow_version.latest_version(registry_name)
-                logger.info("Resolved latest MLflow version=%s for registry_name=%s", args.version, registry_name)
+            version = args.version
+            if version == 0:
+                version = get_latest_mlflow_version.latest_version(registry_name)
+                logger.info("Resolved latest MLflow version=%s for registry_name=%s", version, registry_name)
             get_new_predictions(
                 model_name=args.model_name,
-                version=args.version,
+                version=version,
                 coin=coin,
                 interval=args.interval,
             )
     else:
 
         registry_name = f"{args.model_name}-{args.symbol}-{args.interval}".lower()
-
+        version = args.version
         if args.version == 0:
-            args.version = get_latest_mlflow_version.latest_version(registry_name)
+            version = get_latest_mlflow_version.latest_version(registry_name)
             logger.info("Resolved latest MLflow version=%s for registry_name=%s", args.version, registry_name)
         get_new_predictions(
             model_name=args.model_name,
-            version=args.version,
+            version=version,
             coin=args.symbol,
             interval=args.interval,
         )
