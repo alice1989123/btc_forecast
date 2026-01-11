@@ -7,7 +7,10 @@ coins = [
     'ATOMUSDT', 'ETCUSDT', 'VETUSDT', 'FILUSDT', 'EOSUSDT', 'XTZUSDT',
     'NEOUSDT', 'MKRUSDT', 'AAVEUSDT', 'THETAUSDT'
 ]
-LOG_DIR = "logs"
-LOG_FILE_NAME = "my_application.log"
 
-label_width = 12
+
+
+target = "log_return"
+
+returns_mean = 0.0005
+returns_std = 0.02

@@ -1,0 +1,27 @@
+{
+  "model_key": "GRU",
+  "model_family": "GRU",
+  "model": {
+    "params": {
+      "hidden_size": 128,
+      "num_layers": 2,
+      "dropout": 0.1
+    }
+  },
+  "data": {
+    "input_width": 250,
+    "label_width": 12,
+    "num_features": 1,
+    "variables_used": ["ret"]
+  },
+  "train": {
+    "batch_size": 128,
+    "learning_rate": 0.003,
+    "num_epochs": 80,
+    "patience": 10,
+    "grad_clip": 1.0,
+    "weight_decay": 0.0,
+    "huber_beta": 0.2,
+    "target_clip": 6.0
+  }
+}

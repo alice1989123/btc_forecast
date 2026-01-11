@@ -16,22 +16,27 @@ def train_test(df):
 
 
 
-#Normalize data
-def normalize(df, label_width, window=30):
-    # Ensure ints (avoids "sequence * Timedelta" errors if args came as strings)
-    label_width = int(label_width)
-    window_int  = int(window)
-
+def normalize(df, label_width=None, window=30):
+    """
+    Causal z-score normalization using only past data:
+      mu_t = mean(x_{t-1}, x_{t-2}, ...)
+      std_t = std(x_{t-1}, x_{t-2}, ...)
+    label_width is accepted for backward-compat, but NOT used.
+    """
+    window_int = int(window)
     df_normalized = df.copy()
-    # Rolling window compatible with DateTimeIndex
-    roll_win = resolve_rolling_window(df.index, window)
 
+    roll_win = resolve_rolling_window(df.index, window_int)
 
     for col in df_normalized.columns:
-        s = df_normalized[col]
-        m = s.shift(label_width).rolling(window=roll_win, min_periods=window_int).mean()
-        v = s.shift(label_width).rolling(window=roll_win, min_periods=window_int).std()
-        df_normalized[col] = (s - m) / v
+        s = df_normalized[col].astype(float)
+
+        # ✅ causal: shift(1) (do NOT use shift(label_width))
+        m = s.shift(1).rolling(window=roll_win, min_periods=window_int).mean()
+        v = s.shift(1).rolling(window=roll_win, min_periods=window_int).std()
+
+        eps = 1e-8
+        df_normalized[col] = (s - m) / (v + eps)
 
     return df_normalized.dropna()
 

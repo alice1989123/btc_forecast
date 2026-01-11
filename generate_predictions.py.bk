@@ -1,0 +1,281 @@
+from btc_forecast import predict
+import model_info
+from btc_forecast import get_latest_mlflow_version
+from datetime import datetime, UTC
+import argparse
+import psycopg2
+from psycopg2.extras import execute_values
+import uuid
+import json
+import logging
+import os
+import dotenv
+from typing import List, Dict, Any, Optional, Tuple
+from config import config
+
+import pandas as pd
+
+dotenv.load_dotenv(".keys.env")
+
+DB_HOST = os.getenv("DBHOST")
+DB_USER = os.getenv("DBUSER")
+DB_PASSWORD = os.getenv("DBPASSWORD")
+DB_NAME = os.getenv("DBNAME")
+
+logger = logging.getLogger(__name__)
+
+_STR_TO_LEVEL = {
+    "CRITICAL": logging.CRITICAL,
+    "ERROR": logging.ERROR,
+    "WARNING": logging.WARNING,
+    "INFO": logging.INFO,
+    "DEBUG": logging.DEBUG,
+    "NOTSET": logging.NOTSET,
+}
+
+def _coerce_level(level_str: Optional[str | int], default: int = logging.INFO) -> int:
+    if level_str is None:
+        return default
+    if isinstance(level_str, int):
+        return level_str
+    return _STR_TO_LEVEL.get(str(level_str).upper(), default)
+
+def setup_logging(cli_level: Optional[str], verbose: int, quiet: int) -> None:
+    level = _coerce_level(os.getenv("LOG_LEVEL"), logging.INFO)
+
+    if verbose == 1:
+        level = logging.INFO
+    elif verbose >= 2:
+        level = logging.DEBUG
+    if quiet > 0:
+        level = logging.WARNING
+
+    if cli_level:
+        level = _coerce_level(cli_level, level)
+
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+        force=True,
+    )
+
+    root = logging.getLogger()
+    root.setLevel(level)
+    for h in root.handlers:
+        h.setLevel(level)
+    logging.getLogger(__name__).setLevel(level)
+
+    logging.getLogger("urllib3").setLevel(max(level, logging.WARNING))
+    logging.getLogger("psycopg2").setLevel(max(level, logging.WARNING))
+
+def _env_sanity() -> None:
+    missing = [k for k in ("DBHOST", "DBUSER", "DBPASSWORD", "DBNAME") if not os.getenv(k)]
+    if missing:
+        raise RuntimeError(f"Missing env vars: {missing}")
+
+def _as_timestamptz(x: Any) -> datetime:
+    """
+    Convert common timestamp types to timezone-aware datetime (UTC).
+    psycopg2 handles aware datetimes correctly for timestamptz columns.
+    """
+    if isinstance(x, datetime):
+        return x if x.tzinfo else x.replace(tzinfo=UTC)
+    if isinstance(x, pd.Timestamp):
+        if x.tzinfo is None:
+            # assume UTC if naive
+            x = x.tz_localize("UTC")
+        return x.to_pydatetime()
+    # last resort
+    dt = pd.to_datetime(x, utc=True, errors="raise")
+    return dt.to_pydatetime()
+
+def generate_prediction_series(coin: str, model_name: str, version: int, config: dict) -> pd.Series:
+    s = predict.predict(config, coin, model_name=model_name, version=version)
+
+    if not isinstance(s, pd.Series):
+        raise TypeError(f"predict.predict() must return pd.Series, got {type(s).__name__}")
+
+    if len(s) == 0:
+        raise RuntimeError("predict.predict() returned empty Series")
+
+    # debug index info
+    idx0, idxN = s.index[0], s.index[-1]
+    logger.info("predict_return_type=%s len=%s", type(s).__name__, len(s))
+    logger.info(
+        "index_first=%s tz=%s | index_last=%s tz=%s",
+        idx0, getattr(idx0, "tzinfo", None),
+        idxN, getattr(idxN, "tzinfo", None),
+    )
+
+    return s
+
+def save_prediction_to_postgres(pred_series: pd.Series, metadata: dict, coin: str) -> str:
+    interval = metadata.get("interval")
+    if not interval:
+        raise ValueError("metadata.interval is required (prevents mixing intervals).")
+
+    model_name = metadata.get("model_name")
+    model_version = metadata.get("version")  # optional, depends on your config builder
+    input_width = int(metadata.get("input_width", 0))
+    label_width = int(metadata.get("label_width", 12))
+
+    if label_width <= 0:
+        raise ValueError(f"label_width must be > 0, got {label_width}")
+
+    n = len(pred_series)
+    if n < label_width:
+        raise RuntimeError(f"Series too short: len={n} < label_width={label_width}")
+
+    split_index = n - label_width  # forecast starts here
+
+    prediction_id = uuid.uuid4()
+    created_at = datetime.now(UTC)
+
+    # Build point rows
+    points: List[Tuple[uuid.UUID, int, datetime, float, bool]] = []
+    for i, (ts, val) in enumerate(pred_series.items()):
+        points.append((
+            prediction_id,
+            int(i),
+            _as_timestamptz(ts),
+            float(val),
+            bool(i < split_index),
+        ))
+
+    logger.info(
+        "DB write | total=%s input_width=%s label_width=%s split_index=%s hist=%s forecast=%s",
+        n, input_width, label_width, split_index, split_index, label_width
+    )
+
+    # Persist in one transaction
+    conn = psycopg2.connect(
+        database=DB_NAME,
+        user=DB_USER,
+        password=DB_PASSWORD,
+        host=DB_HOST,
+    )
+
+    try:
+        with conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO prediction_runs
+                      (prediction_id, coin, interval, model_name, model_version, input_width, label_width, split_index, created_at, metadata_json)
+                    VALUES
+                      (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb)
+                    """,
+                    (
+                        str(prediction_id),
+                        coin,
+                        interval,
+                        model_name,
+                        model_version,
+                        input_width,
+                        label_width,
+                        split_index,
+                        created_at,
+                        json.dumps(metadata),
+                    ),
+                )
+
+                execute_values(
+                    cur,
+                    """
+                    INSERT INTO prediction_points
+                      (prediction_id, point_index, point_time, value, is_historical)
+                    VALUES %s
+                    """,
+                    [(str(pid), idx, t, v, hist) for (pid, idx, t, v, hist) in points],
+                    page_size=2000,
+                )
+
+        logger.info("✅ Saved prediction_id=%s coin=%s interval=%s", prediction_id, coin, interval)
+        return str(prediction_id)
+
+    finally:
+        conn.close()
+
+def get_new_predictions(model_name: str, version: int, coin: str, interval: str) -> None:
+    _env_sanity()
+
+    if not interval:
+        raise ValueError("Interval not specified. Use --interval (e.g. 1h, 4h).")
+
+    logger.info("Generating | coin=%s model=%s version=%s interval=%s", coin, model_name, version, interval)
+
+    config = model_info.build_predict_config(
+        model_name=model_name,
+        coin=coin,
+        interval=interval,
+        version=version,
+        
+    )
+    config["registry_name"] = f"{model_name}-{coin}-{interval}".lower()
+    config["version"] = version
+    logger.debug("Using config: %s", config)
+
+    s = generate_prediction_series(coin, model_name=model_name, version=version, config=config)
+    prediction_id = save_prediction_to_postgres(s, config, coin)
+
+    # Helpful boundary logs
+    label_width = int(config.get("label_width", 12))
+    split_index = len(s) - label_width
+    logger.info("Boundary (explicit) | split_index=%s | hist_last=%s | pred_first=%s",
+                split_index,
+                s.index[split_index - 1] if split_index - 1 >= 0 else None,
+                s.index[split_index] if split_index < len(s) else None)
+
+    logger.info("Done | prediction_id=%s", prediction_id)
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Run predictions and save to Postgres only.")
+    parser.add_argument("--model_name", type=str, default="GRU", help="Model family name (e.g., GRU).")
+    parser.add_argument("--version", type=int, default=0, help="Registry version. Use 0 for latest.")
+    parser.add_argument("--symbol", type=str, default="BTCUSDT", help="Coin ID.")
+    parser.add_argument("--interval", type=str, required=True, help="Interval (e.g., '1h').")
+
+    parser.add_argument("--log-level", choices=[k.lower() for k in _STR_TO_LEVEL.keys()],
+                        help="Set log level (overrides -v/--quiet and LOG_LEVEL env).")
+    parser.add_argument("-v", "--verbose", action="count", default=0)
+    parser.add_argument("-q", "--quiet", action="count", default=0)
+
+    args = parser.parse_args()
+    setup_logging(args.log_level, args.verbose, args.quiet)
+
+    # MLflow registry name MUST match training script:
+    # reg_name = f"{MODEL_NAME}-{coin}-{interval_str}".lower()
+    
+
+    # Add traceability into metadata/config (optional but very useful)
+    # This ends up inside metadata_json in Postgres
+    # (Your build_predict_config may ignore unknown keys; that's fine.)
+    # If build_predict_config returns a dict, you can also inject after.
+    print( args.symbol)
+    if args.symbol == "ALL":
+        coins = config.get("coins")
+        for coin in coins:
+            registry_name = f"{args.model_name}-{coin}-{args.interval}".lower()
+
+            if args.version == 0:
+                args.version = get_latest_mlflow_version.latest_version(registry_name)
+                logger.info("Resolved latest MLflow version=%s for registry_name=%s", args.version, registry_name)
+            get_new_predictions(
+                model_name=args.model_name,
+                version=args.version,
+                coin=coin,
+                interval=args.interval,
+            )
+    else:
+
+        registry_name = f"{args.model_name}-{args.symbol}-{args.interval}".lower()
+
+        if args.version == 0:
+            args.version = get_latest_mlflow_version.latest_version(registry_name)
+            logger.info("Resolved latest MLflow version=%s for registry_name=%s", args.version, registry_name)
+        get_new_predictions(
+            model_name=args.model_name,
+            version=args.version,
+            coin=args.symbol,
+            interval=args.interval,
+        )

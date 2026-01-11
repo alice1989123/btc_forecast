@@ -4,40 +4,41 @@ import numpy as np
 import pandas as pd
 
 class WindowedDataset(Dataset):
-    def __init__(self, df: pd.DataFrame, input_width: int, label_width: int, shift: int, variables_used: list, label_columns=None):
-        """
-        df: normalized dataframe (no NaNs)
-        input_width: # of past timesteps (X)
-        label_width: # of timesteps to predict (Y)
-        shift: how far ahead to start labels
-        variables_used: columns used in X
-        label_columns: optional list of target columns (default = same as input)
-        """
+    def __init__(
+        self,
+        df: pd.DataFrame,
+        input_width: int,
+        label_width: int,
+        shift: int,
+        variables_used: list[str],
+        label_columns: list[str] | None = None,
+    ):
         self.df = df
-        self.input_width = input_width
-        self.label_width = label_width
-        self.shift = shift
+        self.input_width = int(input_width)
+        self.label_width = int(label_width)
+        self.shift = int(shift)
         self.variables_used = variables_used
-        self.label_columns = label_columns if label_columns else variables_used
+        self.label_columns = label_columns if label_columns is not None else variables_used
 
-        self.total_window_size = input_width + shift + label_width - 1
+        # ✅ correct: X + gap + Y (no -1)
+        self.total_window_size = self.input_width + self.shift + self.label_width
 
-        # convert to numpy arrays
-        self.x_data = df[variables_used].values.astype(np.float32)
-        self.y_data = df[self.label_columns].values.astype(np.float32)
+        self.x_data = df[self.variables_used].to_numpy(dtype=np.float32)
+        self.y_data = df[self.label_columns].to_numpy(dtype=np.float32)
 
     def __len__(self):
-        return len(self.df) - self.total_window_size
+        n = len(self.df)
+        # ✅ correct: number of full windows
+        return max(0, n - self.total_window_size + 1)
 
     def __getitem__(self, idx):
-        # X = past input_width steps
         x_start = idx
         x_end = idx + self.input_width
         x = self.x_data[x_start:x_end]
 
-        # Y = future label_width steps, starting after shift
-        y_start = x_end + self.shift - 1
+        # ✅ labels start AFTER the input window (+ optional shift)
+        y_start = x_end + self.shift
         y_end = y_start + self.label_width
         y = self.y_data[y_start:y_end]
 
-        return torch.tensor(x), torch.tensor(y)
+        return torch.from_numpy(x), torch.from_numpy(y)

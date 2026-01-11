@@ -20,56 +20,56 @@ def build_predict_config(model_name: str, coin: str, interval: str, *, version: 
     params = info.get("params", {}) or {}
     metrics = info.get("metrics", {}) or {}
 
-    logger.debug("MLflow resolved | run_id=%s experiment_id=%s",
-                 info.get("run_id"), info.get("experiment_id"))
-    logger.debug("MLflow params keys=%s", sorted(list(params.keys())))
-    logger.debug("MLflow metrics keys=%s", sorted(list(metrics.keys())))
-
-    # params from MLflow are strings → coerce (and enforce required keys)
-    missing = [k for k in ("input_width", "label_width") if k not in params or params[k] is None]
-    if missing:
-        raise KeyError(f"Missing required MLflow params: {missing}. Found keys={list(params.keys())}")
-
     input_width = int(params["input_width"])
     label_width = int(params["label_width"])
     win = int(params.get("windows_normalization_length", 30))
 
     variables_used = params.get("variables_used")
-    logger.debug("Raw variables_used type=%s value=%r", type(variables_used).__name__, variables_used)
-
     if isinstance(variables_used, str):
-        # you logged json.dumps(list(...)) so read it back
         try:
             variables_used = json.loads(variables_used)
-            logger.debug("Parsed variables_used JSON -> %s", variables_used)
         except Exception:
-            logger.warning("Failed to json.loads(variables_used). Falling back to ['close']. value=%r", variables_used)
             variables_used = ["close"]
-
     if not variables_used:
-        logger.warning("variables_used empty after parsing. Falling back to ['close'].")
         variables_used = ["close"]
 
-    mae_per_step = [metrics.get(f"mae_step_{i:02d}") for i in range(1, label_width + 1)]
+    # ✅ FIX: use your training metric keys
+    mae_per_step = [
+        metrics.get(f"price_mae_step_{i:02d}") for i in range(1, label_width + 1)
+    ]
     mae_per_step = [float(x) for x in mae_per_step if x is not None]
+
+    rmse_per_step = [
+        metrics.get(f"price_rmse_step_{i:02d}") for i in range(1, label_width + 1)
+    ]
+    rmse_per_step = [float(x) for x in rmse_per_step if x is not None]
+
     cfg = {
         "interval": interval,
-        "model_name": model_name,  # keep base model name for your pipeline
+        "model_name": model_name,  # base family name (e.g. "GRU")
+        "registry_name": registry_name,
+        "version": int(version),
+
         "input_width": input_width,
         "label_width": label_width,
         "windows_normalization_length": win,
         "variables_used": variables_used,
         "input_shape": (input_width, len(variables_used)),
-        "val_loss": metrics.get("val_loss"),
-        "mae": metrics.get("final_mae_per_step"),
-        "mae_per_step": mae_per_step, 
+
+        # ✅ FIX: correct overall metrics
+        "val_loss": metrics.get("val_loss_best") or metrics.get("val_loss"),
+        "mae": metrics.get("price_mae"),
+        "rmse": metrics.get("price_rmse"),
+
+        # ✅ FIX: per-step arrays
+        "mae_per_step": mae_per_step,
+        "rmse_per_step": rmse_per_step,
+
+        # (very useful for returns models if you logged them as params)
+        "returns_mean": float(params["returns_mean"]) if "returns_mean" in params else None,
+        "returns_std": float(params["returns_std"]) if "returns_std" in params else None,
     }
 
-    logger.info(
-        "Predict config ready | in=%s out=%s win=%s feats=%s val_loss=%s mae=%s",
-        input_width, label_width, win, len(variables_used), cfg["val_loss"], cfg["mae"]
-    )
-    logger.debug("Predict config full=%s", cfg)
     return cfg
 
 
