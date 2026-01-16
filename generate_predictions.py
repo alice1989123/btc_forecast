@@ -43,7 +43,7 @@ from mlflow.tracking import MlflowClient
 
 from btc_forecast import predict
 from btc_forecast import get_latest_mlflow_version
-from config.config import coins
+from btc_forecast.db.utils import get_tracked_coins_from_db
 
 # ---------------------------
 # Env
@@ -393,7 +393,8 @@ def main() -> None:
     mlflow.set_tracking_uri(tracking_uri)
 
     if args.symbol == "ALL":
-        for coin in coins:
+        coins_list = get_tracked_coins_from_db()
+        for coin in coins_list:
             registry_name = f"{args.model_name}-{coin}-{args.interval}".lower()
             version = args.version
             if version == 0:

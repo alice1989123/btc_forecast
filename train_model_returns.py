@@ -20,6 +20,10 @@ from btc_forecast.training.mlflow_utils import (
     log_predict_metadata_json,
     get_registered_version_for_run,
 )
+from btc_forecast.db.utils import get_tracked_coins_from_db
+
+import argparse
+
 
 import os
 import json
@@ -40,7 +44,6 @@ import mlflow.pytorch
 from mlflow.models import infer_signature
 from mlflow.tracking import MlflowClient
 
-from config.config import coins as DEFAULT_COINS
 
 from btc_forecast.training.registry import build_model_bundle
 from btc_forecast.training.pipeline_returns import ReturnsTrainSpec, train_returns_model
@@ -74,8 +77,6 @@ mlflow.set_tracking_uri(TRACKING_URI)
 mlflow.set_experiment(f"{MODEL_KEY}_ALL_COINS_RETURNS_{INTERVAL}")
 
 DEBUG_COIN = (os.getenv("DEBUG_COIN") or "BTCUSDT").strip()
-COINS_ENV = (os.getenv("COINS") or "").strip()
-COINS: List[str] = [c.strip() for c in COINS_ENV.split(",") if c.strip()] if COINS_ENV else list(DEFAULT_COINS)
 
 # For pickled torch models: ensure the code that defines classes is available.
 # We ship the *repo root* (folder containing btc_forecast/) with the model.
@@ -102,26 +103,22 @@ def _write_json(tmpdir: Path, filename: str, payload: Dict[str, Any]) -> str:
     return str(p)
 
 
-def run_one(*, coin: str) -> None:
+def run_one(*, coin: str, interval: str, model_key: str) -> None:
     coin = str(coin)
-    interval = str(INTERVAL)
+    interval = str(interval)
+    model_key = str(model_key).strip()
 
-    # Build model/config bundle (currently from local configs; prediction will read config from Registry)
     bundle = build_model_bundle(
-        model_key=MODEL_KEY,
+        model_key=model_key,
         coin=coin,
         interval=interval,
-        overrides={
-            # override examples:
-            # "data": {"input_width": 300},
-            # "train": {"learning_rate": 0.001},
-        },
+        overrides={},
     )
 
     cfg = bundle.config
     model = bundle.model.to(device)
-    registry_name = bundle.registry_name            # e.g. "gru-btcusdt-1h"
-    model_family = bundle.model_family              # e.g. "GRU" (used by predictor as model_name)
+    registry_name = bundle.registry_name
+    model_family = bundle.model_family
 
     data_cfg: Dict[str, Any] = cfg["data"]
     train_cfg: Dict[str, Any] = cfg["train"]
@@ -146,7 +143,7 @@ def run_one(*, coin: str) -> None:
         target_clip=float(train_cfg["target_clip"]) if train_cfg.get("target_clip") is not None else None,
     )
 
-    run_name = f"{MODEL_KEY}|{coin}|{interval}|in{input_width}-out{label_width}"
+    run_name = f"{model_key}|{coin}|{interval}|in{input_width}-out{label_width}"
 
     with mlflow.start_run(run_name=run_name):
         try:
@@ -352,15 +349,48 @@ def run_one(*, coin: str) -> None:
 
 
 def main() -> None:
-    print("MLFLOW_TRACKING_URI:", TRACKING_URI)
-    print("INTERVAL:", INTERVAL)
-    print("MODEL_KEY:", MODEL_KEY)
-    print("COINS:", COINS)
-    print("DEVICE:", device)
-    print("REPO_ROOT shipped with model:", str(REPO_ROOT))
+    parser = argparse.ArgumentParser(description="Train returns models and register to MLflow.")
+    parser.add_argument("--tracking-uri", type=str, default=None, help="MLFLOW_TRACKING_URI override")
+    parser.add_argument("--model_name", type=str, default=None, help="Model family key (e.g., GRU)")
+    parser.add_argument("--symbol", type=str, default="ALL", help="Coin symbol (e.g., BTCUSDT) or ALL")
+    parser.add_argument("--interval", type=str, default=None, help="Interval (e.g., 1h)")
+    parser.add_argument("--seed", type=int, default=None, help="Random seed override")
+    args = parser.parse_args()
 
-    for coin in COINS:
-        run_one(coin=coin)
+    # Resolve config: CLI > env > defaults
+    tracking_uri = args.tracking_uri or os.getenv("TRACKING_URI") or os.getenv("MLFLOW_TRACKING_URI")
+    if not tracking_uri:
+        raise ValueError("Missing tracking URI. Use --tracking-uri or set MLFLOW_TRACKING_URI.")
+
+    interval = (args.interval or os.getenv("INTERVAL") or "1h").strip()
+    model_key = (args.model_name or os.getenv("MODEL_KEY") or "GRU").strip()
+
+    # (Optional) seed override
+    if args.seed is not None:
+        np.random.seed(args.seed)
+        torch.manual_seed(args.seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(args.seed)
+
+    # MLflow should be set AFTER final interval/model_key are resolved
+    mlflow.set_tracking_uri(tracking_uri)
+    mlflow.set_experiment(f"{model_key}_ALL_COINS_RETURNS_{interval}")
+
+    print("MLFLOW_TRACKING_URI:", tracking_uri)
+    print("MODEL_KEY:", model_key)
+    print("INTERVAL:", interval)
+    print("DEVICE:", device)
+
+    if args.symbol.upper() == "ALL":
+        coins_list = get_tracked_coins_from_db()
+        print("COINS:", coins_list)
+        for coin in coins_list:
+            print("Running for coin:", coin)
+            run_one(coin=coin, interval=interval, model_key=model_key)
+    else:
+        coin = args.symbol.strip().upper()
+        print("Running for coin:", coin)
+        run_one(coin=coin, interval=interval, model_key=model_key)
 
 
 if __name__ == "__main__":
