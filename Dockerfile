@@ -1,4 +1,4 @@
-FROM registry-docker-registry.registry.svc.cluster.local:5000/mlflow-pytorch:latest
+FROM 390402534126.dkr.ecr.us-east-1.amazonaws.com/mlflow-pytorch@sha256:f132b4b813bb24205f9bb5d1e6df7863ba7b852ed42f5886de4e770d0763cb47
 
 
 

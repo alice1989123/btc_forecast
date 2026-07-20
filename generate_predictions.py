@@ -159,7 +159,7 @@ def load_predict_config_from_registry(*, registry_name: str, version: int) -> Di
 
     # 1) Preferred: config packaged with the registered model
     #    (what we created via mlflow.pytorch.log_model(extra_files=[predict_config.json,...]))
-    model_cfg_uri = f"models:/{registry_name}/{version}/predict_config.json"
+    model_cfg_uri = f"models:/{registry_name}/{version}/extra_files/predict_config.json"
     cfg = _try_load_dict(model_cfg_uri)
     if cfg:
         cfg["registry_name"] = registry_name
@@ -412,7 +412,7 @@ def main() -> None:
         version = args.version
         if args.version == 0:
             version = get_latest_mlflow_version.latest_version(registry_name)
-            logger.info("Resolved latest MLflow version=%s for registry_name=%s", args.version, registry_name)
+            logger.info("Resolved latest MLflow version=%s for registry_name=%s", version, registry_name)
         get_new_predictions(
             model_name=args.model_name,
             version=version,
