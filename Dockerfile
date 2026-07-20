@@ -11,7 +11,6 @@ COPY btc_forecast ./btc_forecast
 COPY config ./config
 COPY logs ./logs
 COPY generate_predictions.py .
-COPY train_models.py .
 COPY model_info.py .
 COPY logger.py .
 COPY utils ./utils
